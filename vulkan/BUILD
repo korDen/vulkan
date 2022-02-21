@@ -4,8 +4,10 @@ cc_binary(
     linkopts = select({
         "@platforms//os:macos": ["-undefined error"],
         "//conditions:default": [],
-    }) + [
-        "-lglfw",
-        "-lvulkan",
+    }),
+    deps = [
+        "@glfw//:glfw",
+        "@glm//:glm",
+        "@rules_vulkan//vulkan:vulkan_cc_library",
     ],
 )
