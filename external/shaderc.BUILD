@@ -24,6 +24,7 @@ cc_library(
         "libshaderc_util/include",
     ],
     deps = [
+        "@spirv_tools//:spirv_tools",
         "@glslang//:SPIRV",
     ],
 )
@@ -34,12 +35,14 @@ cc_library(
         "libshaderc/src/shaderc.cc",
     ],
     hdrs = [
+        "libshaderc/include/shaderc/shaderc.hpp",
         "libshaderc/src/shaderc_private.h",
     ],
     deps = [
         ":libshaderc_util",
         "@spirv_headers//:spirv_cpp_headers",
     ],
+    includes = ["libshaderc/include"],
 )
 
 cc_binary(
