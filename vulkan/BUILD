@@ -2,21 +2,14 @@ cc_binary(
     name = "basic",
     srcs = ["basic/main.cpp"],
     linkopts = select({
-        "@platforms//os:macos": [
-            "-undefined error",
-            "-lglfw",
-            "-lvulkan",
-        ],
+        "@platforms//os:macos": ["-undefined error"],
         "//conditions:default": [],
     }),
-    deps = select({
-        "@platforms//os:macos": [],
-        "//conditions:default": [
-            "@glfw//:glfw",
-            "@glm//:glm",
-            "@rules_vulkan//vulkan:vulkan_cc_library",
-        ],
-    }),
+    deps = [
+        "@glfw",
+        "@glm",
+        "@rules_vulkan//vulkan:vulkan_cc_library",
+    ],
 )
 
 genrule(
@@ -43,19 +36,12 @@ cc_binary(
         "vert.spv",
     ],
     linkopts = select({
-        "@platforms//os:macos": [
-            "-undefined error",
-            "-lglfw",
-            "-lvulkan",
-        ],
+        "@platforms//os:macos": ["-undefined error"],
         "//conditions:default": [],
     }),
-    deps = select({
-        "@platforms//os:macos": [],
-        "//conditions:default": [
-            "@glfw//:glfw",
-            "@glm//:glm",
-            "@rules_vulkan//vulkan:vulkan_cc_library",
-        ],
-    }) + ["@bazel_tools//tools/cpp/runfiles"],
+    deps = [
+        "@bazel_tools//tools/cpp/runfiles",
+        "@glfw",
+        "@rules_vulkan//vulkan:vulkan_cc_library",
+    ],
 )

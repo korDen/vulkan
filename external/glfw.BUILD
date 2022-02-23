@@ -24,6 +24,8 @@ WIN32_LINKOPTS = [
     "-DEFAULTLIB:shell32.lib",
 ]
 
+WIN32_DEPS = []
+
 LINUX_DEFINES = [
     "_GLFW_HAS_XF86VM",
     "_GLFW_X11",
@@ -53,8 +55,56 @@ LINUX_LINKOPTS = [
     "-ldl",
 ]
 
+LINUX_DEPS = []
+
+DARWIN_DEFINES = [
+    "_GLFW_COCOA",
+]
+
+DARWIN_HDRS = [
+    "src/cocoa_platform.h",
+    "src/posix_thread.h",
+    "src/cocoa_joystick.h",
+    "src/nsgl_context.h",
+]
+
+DARWIN_SRCS = [
+    "src/posix_thread.c",
+    "src/cocoa_time.c",
+]
+
+DARWIN_LINKOPTS = []
+
+DARWIN_DEPS = [":glfw_darwin"]
+
+objc_library(
+    name = "glfw_darwin",
+    hdrs = [
+        "src/internal.h",
+        "src/egl_context.h",
+        "src/osmesa_context.h",
+    ] + DARWIN_HDRS,
+    defines = DARWIN_DEFINES,
+    non_arc_srcs = [
+        "src/cocoa_init.m",
+        "src/cocoa_joystick.m",
+        "src/cocoa_monitor.m",
+        "src/cocoa_window.m",
+        "src/nsgl_context.m",
+    ],
+    sdk_frameworks = [
+        "IOKit",
+        "CoreVideo",
+        "AppKit",
+        #     # "Cocoa",
+        #     # "OpenGL",
+        #     # "GameController",
+    ],
+    deps = [":glfw_hdrs"],
+)
+
 cc_library(
-    name = "glfw_src",
+    name = "glfw",
     srcs = [
         "src/context.c",
         "src/egl_context.c",
@@ -68,6 +118,7 @@ cc_library(
     ] + select({
         "@bazel_tools//src/conditions:windows": WIN32_SRCS,
         "@bazel_tools//src/conditions:linux_x86_64": LINUX_SRCS,
+        "@bazel_tools//src/conditions:darwin": DARWIN_SRCS,
     }),
     hdrs = [
         "include/GLFW/glfw3.h",
@@ -80,15 +131,23 @@ cc_library(
     ] + select({
         "@bazel_tools//src/conditions:windows": WIN32_HDRS,
         "@bazel_tools//src/conditions:linux_x86_64": LINUX_HDRS,
+        "@bazel_tools//src/conditions:darwin": DARWIN_HDRS,
     }),
     defines = select({
         "@bazel_tools//src/conditions:windows": WIN32_DEFINES,
         "@bazel_tools//src/conditions:linux_x86_64": LINUX_DEFINES,
+        "@bazel_tools//src/conditions:darwin": DARWIN_DEFINES,
+    }),
+    visibility = ["//visibility:public"],
+    deps = select({
+        "@bazel_tools//src/conditions:windows": WIN32_DEPS,
+        "@bazel_tools//src/conditions:linux_x86_64": LINUX_DEPS,
+        "@bazel_tools//src/conditions:darwin": DARWIN_DEPS,
     }),
 )
 
 cc_library(
-    name = "glfw",
+    name = "glfw_hdrs",
     hdrs = [
         "include/GLFW/glfw3.h",
         "include/GLFW/glfw3native.h",
@@ -96,8 +155,11 @@ cc_library(
     linkopts = select({
         "@bazel_tools//src/conditions:windows": WIN32_LINKOPTS,
         "@bazel_tools//src/conditions:linux_x86_64": LINUX_LINKOPTS,
+        "@bazel_tools//src/conditions:darwin": DARWIN_LINKOPTS,
     }),
     strip_include_prefix = "include",
     visibility = ["//visibility:public"],
-    deps = [":glfw_src"],
+    deps = [
+        "@rules_vulkan//vulkan:vulkan_cc_library",
+    ],
 )
