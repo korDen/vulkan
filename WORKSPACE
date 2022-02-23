@@ -66,12 +66,12 @@ git_repository(
     shallow_since = "1645508790 -0800",
 )
 
-git_repository(
-    name = "bazel_skylib",
-    commit = "c4dfec1bf1316ab4e9fffbb382cf48259e0944fb",
-    remote = "https://github.com/bazelbuild/bazel-skylib.git",
-    shallow_since = "1644598925 -0500",
-)
+# git_repository(
+#     name = "bazel_skylib",
+#     commit = "c4dfec1bf1316ab4e9fffbb382cf48259e0944fb",
+#     remote = "https://github.com/bazelbuild/bazel-skylib.git",
+#     shallow_since = "1644598925 -0500",
+# )
 
 git_repository(
     name = "build_bazel_rules_nodejs",
@@ -85,3 +85,15 @@ load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_regi
 rules_rust_dependencies()
 
 rust_register_toolchains()
+
+git_repository(
+    name = "build_bazel_rules_apple",
+    remote = "https://github.com/bazelbuild/rules_apple",
+    tag = "0.33.0",
+    # commit = "6ee60b3827bd6b1cf2822279b1402243c34af63c",
+    # shallow_since = "1597117105 -0700"
+)
+
+load("@build_bazel_rules_apple//apple:repositories.bzl", "apple_rules_dependencies")
+
+apple_rules_dependencies()
