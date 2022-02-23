@@ -14,13 +14,30 @@ public:
 
 	virtual void term() override {}
 	virtual bool initGraphics() override {
-	  if (!createInstance() || !createSurface() || !pickPhysicalDevice() || !createLogicalDevice()) {
+	  if (!createInstance()) {
+	  	fprintf(stderr, "failed to create instance.");
 	  	return false;
 	  }
 
-	  printf("init done.\n");
-	  return false;
+	  if (!createSurface()) {
+	  	fprintf(stderr, "failed to create surface.");
+	  	return false;
+	  }
+
+	  if (!pickPhysicalDevice()) {
+	  	fprintf(stderr, "failed to pick physical device.");
+	  	return false;
+	  }
+
+	   if (!createLogicalDevice()) {
+	  	fprintf(stderr, "failed to create logical device.");
+	  	return false;
+	  }
+
+	  fprintf(stderr, "init done.");
+	  return true;
 	}
+
 	virtual void termGraphics() override {}
 	virtual void renderFrame() override {}
 	virtual void resize(float windowWidth, float windowHeight) override {}
@@ -52,20 +69,25 @@ private:
     	}
     }
 
+    uint32_t enabledExtensionCount = 2;
     const char* ppEnabledExtensionNames[] = {
-    	// Either of these two is required to create a metal surface.
+#if defined OS_MACOSX
     	"VK_EXT_metal_surface",
-    	// "VK_MVK_macos_surface", // Deprecated.
-
-    	// Required by VK_EXT_metal_surface and VK_MVK_macos_surface.
+#elif defined _WIN32
+    	"VK_KHR_win32_surface",
+#elif defined LINUX
+    	"VK_KHR_xcb_surface",
+#endif
+    	// Always required to create a surface.
     	"VK_KHR_surface",
     };
+
     VkInstanceCreateInfo createInfo {
     	.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
     	.pApplicationInfo = &appInfo,
     	.enabledLayerCount = enabledLayerCount,
     	.ppEnabledLayerNames = ppEnabledLayerNames,
-    	.enabledExtensionCount = 2,
+    	.enabledExtensionCount = enabledExtensionCount,
     	.ppEnabledExtensionNames = ppEnabledExtensionNames,
     };
 
@@ -96,7 +118,7 @@ private:
 
 	bool createLogicalDevice() {
 		// TODO: implement.
-		return false;
+		return true;
 	}
 
 	ApplicationController* _applicationController;

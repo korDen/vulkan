@@ -15,6 +15,14 @@ cc_library(
     ],
 )
 
+cc_binary(
+    name = "windows_app",
+    deps = [
+        ":app",
+        "//vulkan/platform/windows",
+    ],
+)
+
 macos_application(
     name = "macos_app",
     bundle_id = "vulkan.app.mac",
