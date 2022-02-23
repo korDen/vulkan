@@ -63,10 +63,13 @@ private:
     const char** ppEnabledLayerNames = (const char**) malloc(layerCount * sizeof(const char*));
     for (uint32_t i = 0; i < layerCount; ++i) {
     	const char* layerName = props[i].layerName;
-    	if (strcmp("VK_LAYER_LUNARG_device_simulation", layerName) != 0) {
-    		ppEnabledLayerNames[enabledLayerCount] = layerName;
-    		++enabledLayerCount;
+    	if (strcmp("VK_LAYER_LUNARG_device_simulation", layerName) == 0 ||
+    			strcmp("VK_LAYER_LUNARG_gfxreconstruct", layerName) == 0) {
+    		continue;
     	}
+
+    	ppEnabledLayerNames[enabledLayerCount] = layerName;
+    	++enabledLayerCount;
     }
 
     uint32_t enabledExtensionCount = 2;
@@ -78,7 +81,6 @@ private:
 #elif defined LINUX
     	"VK_KHR_xcb_surface",
 #endif
-    	// Always required to create a surface.
     	"VK_KHR_surface",
     };
 

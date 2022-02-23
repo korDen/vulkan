@@ -7,8 +7,6 @@
 
 #include "vulkan/platform/app/Application.h"
 
-HINSTANCE 
-
 LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam )
 {
   if (message == WM_DESTROY) {
@@ -31,19 +29,18 @@ typedef struct VkWin32SurfaceCreateInfoKHR {
     HINSTANCE                       hinstance;
     HWND                            hwnd;
 } VkWin32SurfaceCreateInfoKHR;
+typedef VkResult (VKAPI_PTR *PFN_vkCreateWin32SurfaceKHR)(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
 
-class ApplicationControllerImpl : ApplicationController {
+class ApplicationControllerImpl : public ApplicationController {
 public:
-  ApplicationControllerImpl(HINSTANCE hInstance, HWND hWnd) : _hInstance(hInstance), _hWnd(hWnd) {
-
-  }
+  ApplicationControllerImpl(HINSTANCE hInstance, HWND hWnd) : _hInstance(hInstance), _hWnd(hWnd) {}
 
 private:
   HINSTANCE _hInstance;
   HWND _hWnd;
 
   friend class ApplicationController;
-}
+};
 
 bool ApplicationController::createSurface(VkInstance instance, VkSurfaceKHR* surface) {
   PFN_vkCreateWin32SurfaceKHR vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR) vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
