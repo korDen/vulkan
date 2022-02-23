@@ -1,14 +1,12 @@
 #pragma once
 
+#include <vulkan/vulkan.h>
+
 class ApplicationController {
  public:
-  ApplicationController(void* state) : _state(state) {}
-
   void invalidate();
   void quit();
-
- private:
-  void* _state;
+  bool createSurface(VkInstance instance, VkSurfaceKHR* surface);
 };
 
 class Application {

@@ -9,14 +9,17 @@ apple_bundle_version(
 cc_library(
     name = "app",
     srcs = ["app.cpp"],
-    deps = ["//vulkan/platform/app:Application"],
+    deps = [
+        "//vulkan/platform/app:Application",
+        "@rules_vulkan//vulkan:vulkan_cc_library",
+    ],
 )
 
 macos_application(
     name = "macos_app",
     bundle_id = "vulkan.app.mac",
     infoplists = ["//vulkan/platform/macos:info.plist"],
-    minimum_os_version = "10.11",
+    minimum_os_version = "10.12",
     version = ":version",
     deps = [
         ":app",

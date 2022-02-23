@@ -1,10 +1,15 @@
 #if defined OS_MACOSX
 
 #include "vulkan/platform/macos/AppDelegate.h"
-#include "vulkan/platform/macos/Window.h"
+#include "vulkan/platform/macos/OpenGLWindow.h"
+#include "vulkan/platform/macos/MetalWindow.h"
 
 @implementation AppDelegate {
-  Window* _view;
+#if defined PLATFORM_MACOS_USE_OPENGL
+  OpenGLWindow* _view;
+#elif defined PLATFORM_MACOS_USE_METAL
+  MetalWindow* _view;
+#endif
 }
 
 - (id)init {
@@ -46,6 +51,7 @@
 - (void)applicationWillFinishLaunching:(NSNotification*)notification {
   [_window makeKeyAndOrderFront:self];
 
+#if defined PLATFORM_MACOS_USE_OPENGL
   NSOpenGLPixelFormatAttribute attr[] = {NSOpenGLPFADoubleBuffer,
                                          NSOpenGLPFAAccelerated,
                                          NSOpenGLPFAColorSize,
@@ -54,7 +60,11 @@
                                          16,
                                          0};
   NSOpenGLPixelFormat* format = [[NSOpenGLPixelFormat alloc] initWithAttributes:attr];
-  _view = [[Window alloc] initWithFrame:[_window frame] pixelFormat:format];
+  _view = [[OpenGLWindow alloc] initWithFrame:[_window frame] pixelFormat:format];
+#elif defined PLATFORM_MACOS_USE_METAL
+  _view = [[MetalWindow alloc] initWithFrame:[_window frame] device:MTLCreateSystemDefaultDevice()];
+#endif
+  [_view setupApplicationWithWindow: _window];
   [_view setWantsBestResolutionOpenGLSurface:YES];
   [_window setContentView:_view];
 }
