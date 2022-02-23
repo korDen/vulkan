@@ -96,11 +96,26 @@ objc_library(
         "IOKit",
         "CoreVideo",
         "AppKit",
-        #     # "Cocoa",
-        #     # "OpenGL",
-        #     # "GameController",
     ],
     deps = [":glfw_hdrs"],
+)
+
+cc_library(
+    name = "glfw_hdrs",
+    hdrs = [
+        "include/GLFW/glfw3.h",
+        "include/GLFW/glfw3native.h",
+    ],
+    linkopts = select({
+        "@bazel_tools//src/conditions:windows": WIN32_LINKOPTS,
+        "@bazel_tools//src/conditions:linux_x86_64": LINUX_LINKOPTS,
+        "@bazel_tools//src/conditions:darwin": DARWIN_LINKOPTS,
+    }),
+    strip_include_prefix = "include",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@rules_vulkan//vulkan:vulkan_cc_library",
+    ],
 )
 
 cc_library(
@@ -121,8 +136,6 @@ cc_library(
         "@bazel_tools//src/conditions:darwin": DARWIN_SRCS,
     }),
     hdrs = [
-        "include/GLFW/glfw3.h",
-        "include/GLFW/glfw3native.h",
         "src/egl_context.h",
         "src/internal.h",
         "src/osmesa_context.h",
@@ -139,27 +152,10 @@ cc_library(
         "@bazel_tools//src/conditions:darwin": DARWIN_DEFINES,
     }),
     visibility = ["//visibility:public"],
-    deps = select({
+    deps = [":glfw_hdrs"] + select({
         "@bazel_tools//src/conditions:windows": WIN32_DEPS,
         "@bazel_tools//src/conditions:linux_x86_64": LINUX_DEPS,
         "@bazel_tools//src/conditions:darwin": DARWIN_DEPS,
     }),
 )
 
-cc_library(
-    name = "glfw_hdrs",
-    hdrs = [
-        "include/GLFW/glfw3.h",
-        "include/GLFW/glfw3native.h",
-    ],
-    linkopts = select({
-        "@bazel_tools//src/conditions:windows": WIN32_LINKOPTS,
-        "@bazel_tools//src/conditions:linux_x86_64": LINUX_LINKOPTS,
-        "@bazel_tools//src/conditions:darwin": DARWIN_LINKOPTS,
-    }),
-    strip_include_prefix = "include",
-    visibility = ["//visibility:public"],
-    deps = [
-        "@rules_vulkan//vulkan:vulkan_cc_library",
-    ],
-)

@@ -48,7 +48,6 @@ cc_library(
         ":libshaderc_util",
         "@spirv_headers//:spirv_cpp_headers",
     ],
-    includes = ["libshaderc/include"],
 )
 
 cc_binary(
