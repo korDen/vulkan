@@ -1,4 +1,5 @@
-#pragma comment(linker, "/subsystem:windows /ENTRY:mainCRTStartup")
+#define _CRTDBG_MAP_ALLOC
+#include <crtdbg.h>
 
 #define _AMD64_
 #include <windef.h>
@@ -6,13 +7,12 @@
 #include <stdio.h>
 #include <fileapi.h>
 #include <handleapi.h>
+#include <debugapi.h>
+#include <synchapi.h>
+#include <stdio.h>
 
 #include "vulkan/platform/app/Application.h"
-
 #include "tools/cpp/runfiles/runfiles.h"
-using bazel::tools::cpp::runfiles::Runfiles;
-
-Runfiles* runfiles;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
   if (message == WM_DESTROY) {
@@ -39,11 +39,22 @@ typedef VkResult (VKAPI_PTR *PFN_vkCreateWin32SurfaceKHR)(VkInstance instance, c
 
 class ApplicationControllerImpl : public ApplicationController {
 public:
-  ApplicationControllerImpl(HINSTANCE hInstance, HWND hWnd) : _hInstance(hInstance), _hWnd(hWnd) {}
+  ApplicationControllerImpl(HINSTANCE hInstance, HWND hWnd) : _hInstance(hInstance), _hWnd(hWnd), _prefix("vulkan/vulkan/") {
+    char executablePath[MAX_PATH];
+    GetModuleFileNameA(nullptr, executablePath, sizeof(executablePath));
+
+    _runfiles = bazel::tools::cpp::runfiles::Runfiles::Create(executablePath);
+  }
+
+  ~ApplicationControllerImpl() {
+    delete _runfiles;
+  }
 
 private:
   HINSTANCE _hInstance;
   HWND _hWnd;
+  std::string _prefix;
+  bazel::tools::cpp::runfiles::Runfiles* _runfiles;
 
   friend class ApplicationController;
 };
@@ -55,7 +66,6 @@ bool ApplicationController::createSurface(VkInstance instance, VkSurfaceKHR* sur
   }
 
   ApplicationControllerImpl* impl = (ApplicationControllerImpl*) this;
-
   VkWin32SurfaceCreateInfoKHR sci {
     .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
     .hinstance = impl->_hInstance,
@@ -66,11 +76,12 @@ bool ApplicationController::createSurface(VkInstance instance, VkSurfaceKHR* sur
 }
 
 void* ApplicationController::readFile(const char* fileName, uint64_t* size) {
-  std::string path = "vulkan/vulkan/";
-  const char* fullPath = runfiles->Rlocation(path + fileName).c_str();
+  ApplicationControllerImpl* impl = (ApplicationControllerImpl*) this;
+  std::string fullPath = impl->_runfiles->Rlocation(impl->_prefix + fileName);
 
-  HANDLE fd = CreateFileA(fullPath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  HANDLE fd = CreateFileA(fullPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (fd == INVALID_HANDLE_VALUE) {
+    DebugBreak();
     return nullptr;
   }
 
@@ -91,24 +102,25 @@ void* ApplicationController::readFile(const char* fileName, uint64_t* size) {
     return nullptr;
   }
 
-  /*
-  FILE* f = fopen(fullPath, "rb");
-  fseek(f, 0, SEEK_END);
-  int fileSize = ftell(f);
-  fseek(f, 0, SEEK_SET);
-
-  void* data = malloc(fileSize);
-  auto bytesRead = fread(data, 1, fileSize, f);
-  if (bytesRead != fileSize) {
-    printf("bytesRead: %zd != fileSize: %d\n", bytesRead, fileSize);
-    return nullptr;
-  }
-  
-  printf("bytesRead: %zd == fileSize: %d\n", bytesRead, fileSize);
-  */
-
   *size = fileSize;
   return data;
+}
+
+void runMainLoop(Application* app) {
+  while (true) {
+    MSG msg;
+
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+      if (msg.message == WM_QUIT) {
+        return;
+      } else {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg); 
+      }
+    }
+
+    app->renderFrame();
+  }
 }
 
 int WINAPI WinMain(
@@ -117,6 +129,16 @@ int WINAPI WinMain(
   LPSTR     lpCmdLine,
   int       nShowCmd
 ) {
+  _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+  _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_DEBUG);
+
+  _CrtSetReportMode( _CRT_WARN, _CRTDBG_MODE_FILE );
+  _CrtSetReportFile( _CRT_WARN, _CRTDBG_FILE_STDOUT );
+  _CrtSetReportMode( _CRT_ERROR, _CRTDBG_MODE_FILE );
+  _CrtSetReportFile( _CRT_ERROR, _CRTDBG_FILE_STDOUT );
+  _CrtSetReportMode( _CRT_ASSERT, _CRTDBG_MODE_FILE );
+  _CrtSetReportFile( _CRT_ASSERT, _CRTDBG_FILE_STDOUT );
+
   const wchar_t* className = L"Application";
   const wchar_t* caption = L"Application Title";
   HBRUSH hBackgroundBrush = (HBRUSH) COLOR_WINDOW;
@@ -151,35 +173,14 @@ int WINAPI WinMain(
     return -1;
   }
 
-  char executablePath[MAX_PATH];
-  GetModuleFileNameA(nullptr, executablePath, sizeof(executablePath));
-  runfiles = Runfiles::Create(executablePath);
-
   ApplicationControllerImpl applicationController = ApplicationControllerImpl(hInstance, hWnd);
   Application* app = createApplication();
   app->init(&applicationController);
 
   bool canRender = app->initGraphics();
-  ShowWindow(hWnd, nShowCmd);
-
-  while (true) {
-    MSG msg;
-
-    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-      if (msg.message == WM_QUIT) {
-        // TODO: break.
-      } else {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg); 
-      }
-    }
-
-    if (canRender) {
-      app->renderFrame();
-    }
-  }
-
   if (canRender) {
+    ShowWindow(hWnd, nShowCmd);
+    runMainLoop(app);
     app->termGraphics();
   }
 
