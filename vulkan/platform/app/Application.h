@@ -7,6 +7,7 @@ class ApplicationController {
   void invalidate();
   void quit();
   bool createSurface(VkInstance instance, VkSurfaceKHR* surface);
+  void* readFile(const char* fileName, uint64_t* size);
 };
 
 class Application {

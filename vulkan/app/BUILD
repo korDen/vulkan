@@ -21,16 +21,24 @@ cc_binary(
         ":app",
         "//vulkan/platform/windows",
     ],
+    data = [
+        "//vulkan:frag.spv",
+        "//vulkan:vert.spv",
+    ]
 )
 
 macos_application(
     name = "macos_app",
     bundle_id = "vulkan.app.mac",
     infoplists = ["//vulkan/platform/macos:info.plist"],
-    minimum_os_version = "10.12",
+    minimum_os_version = "10.13",
     version = ":version",
     deps = [
         ":app",
         "//vulkan/platform/macos",
     ],
+    additional_contents = {
+        "//vulkan:frag.spv": "Resources",
+        "//vulkan:vert.spv": "Resources",
+    },
 )

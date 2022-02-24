@@ -130,3 +130,28 @@ bool ApplicationController::createSurface(VkInstance instance, VkSurfaceKHR* sur
 
   return createMetalSurface(instance, layer, surface) || createMetalSurfaceFallback(instance, layer, surface);
 }
+
+struct foo{};
+
+void* ApplicationController::readFile(const char* fileName, uint64_t* size) {
+  NSString* resourcePath = [[NSBundle mainBundle] resourcePath];
+  NSString* fullPath = [resourcePath stringByAppendingPathComponent:[NSString stringWithUTF8String:fileName]];
+  int fd = open([fullPath UTF8String], O_RDONLY);
+  if (fd == -1) {
+    return nullptr;
+  }
+
+  off_t fileSize = lseek(fd, 0, SEEK_END);
+  lseek(fd, 0, SEEK_SET);
+
+  void* data = malloc(fileSize);
+  ssize_t bytesRead = read(fd, data, fileSize);
+  close(fd);
+
+  if (bytesRead != fileSize) {
+    return nullptr;
+  }
+
+  *size = fileSize;
+  return data;
+}

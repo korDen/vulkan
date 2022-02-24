@@ -48,8 +48,15 @@
   return NSTerminateNow;
 }
 
+static void handle_crash(int sig) {
+  NSLog(@"crash: %@", [NSThread callStackSymbols]);
+  exit(-1);
+}
+
 - (void)applicationWillFinishLaunching:(NSNotification*)notification {
   [_window makeKeyAndOrderFront:self];
+
+  signal(SIGSEGV, handle_crash);
 
 #if defined PLATFORM_MACOS_USE_OPENGL
   NSOpenGLPixelFormatAttribute attr[] = {NSOpenGLPFADoubleBuffer,
