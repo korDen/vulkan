@@ -107,15 +107,6 @@ bool ApplicationController::createSurface(VkInstance instance, VkSurfaceKHR* sur
   return createMetalSurface(instance, layer, surface);
 }
 
-void ApplicationController::getFramebufferSize(double* width, double* height) {
-  ApplicationControllerImpl* impl = (ApplicationControllerImpl*) this;
-  NSView* view = impl->_view;
-  NSRect fbRect = [view convertRectToBacking:[view frame]];
-
-  *width = fbRect.size.width;
-  *height = fbRect.size.height;
-}
-
 void* ApplicationController::readFile(const char* fileName, uint64_t* size) {
   NSString* resourcePath = [[NSBundle mainBundle] resourcePath];
   NSString* fullPath = [resourcePath stringByAppendingPathComponent:[NSString stringWithUTF8String:fileName]];
