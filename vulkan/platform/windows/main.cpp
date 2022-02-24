@@ -4,11 +4,17 @@
 #include <windef.h>
 #include <winuser.h>
 #include <stdio.h>
+#include <fileapi.h>
+#include <handleapi.h>
 
 #include "vulkan/platform/app/Application.h"
 
-LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam )
-{
+#include "tools/cpp/runfiles/runfiles.h"
+using bazel::tools::cpp::runfiles::Runfiles;
+
+Runfiles* runfiles;
+
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
   if (message == WM_DESTROY) {
     PostQuitMessage(0);
   }
@@ -59,6 +65,52 @@ bool ApplicationController::createSurface(VkInstance instance, VkSurfaceKHR* sur
   return vkCreateWin32SurfaceKHR(instance, &sci, nullptr, surface) == VK_SUCCESS;
 }
 
+void* ApplicationController::readFile(const char* fileName, uint64_t* size) {
+  std::string path = "vulkan/vulkan/";
+  const char* fullPath = runfiles->Rlocation(path + fileName).c_str();
+
+  HANDLE fd = CreateFileA(fullPath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (fd == INVALID_HANDLE_VALUE) {
+    return nullptr;
+  }
+
+  DWORD fileSizeHigh;
+  DWORD fileSize = GetFileSize(fd, &fileSizeHigh);
+  if (fileSizeHigh != 0) {
+    // file is too big.
+    return nullptr;
+  }
+
+  void* data = malloc(fileSize);
+  DWORD bytesRead;
+  BOOL success = ReadFile(fd, data, fileSize, &bytesRead, nullptr);
+  CloseHandle(fd);
+
+  if (!success || bytesRead != fileSize) {
+    free(data);
+    return nullptr;
+  }
+
+  /*
+  FILE* f = fopen(fullPath, "rb");
+  fseek(f, 0, SEEK_END);
+  int fileSize = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  void* data = malloc(fileSize);
+  auto bytesRead = fread(data, 1, fileSize, f);
+  if (bytesRead != fileSize) {
+    printf("bytesRead: %zd != fileSize: %d\n", bytesRead, fileSize);
+    return nullptr;
+  }
+  
+  printf("bytesRead: %zd == fileSize: %d\n", bytesRead, fileSize);
+  */
+
+  *size = fileSize;
+  return data;
+}
+
 int WINAPI WinMain(
   HINSTANCE hInstance,
   HINSTANCE hPrevInstance,
@@ -99,6 +151,10 @@ int WINAPI WinMain(
     return -1;
   }
 
+  char executablePath[MAX_PATH];
+  GetModuleFileNameA(nullptr, executablePath, sizeof(executablePath));
+  runfiles = Runfiles::Create(executablePath);
+
   ApplicationControllerImpl applicationController = ApplicationControllerImpl(hInstance, hWnd);
   Application* app = createApplication();
   app->init(&applicationController);
@@ -106,9 +162,21 @@ int WINAPI WinMain(
   bool canRender = app->initGraphics();
   ShowWindow(hWnd, nShowCmd);
 
-  MSG msg;
-  while (GetMessage(&msg, nullptr, 0, 0)) {
-      DispatchMessage(&msg);
+  while (true) {
+    MSG msg;
+
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+      if (msg.message == WM_QUIT) {
+        // TODO: break.
+      } else {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg); 
+      }
+    }
+
+    if (canRender) {
+      app->renderFrame();
+    }
   }
 
   if (canRender) {

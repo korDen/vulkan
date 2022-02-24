@@ -85,21 +85,20 @@ public:
 
 	virtual void termGraphics() override {}
 	virtual void renderFrame() override {
-		printf("+renderFrame\n");
-
 		vkWaitForFences(_logicalDevice, 1, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
 
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(_logicalDevice, _swapChain, UINT64_MAX, _imageAvailableSemaphores[_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-    	printf("ERROR\n");
+    	fprintf(stderr, "ERROR\n");
+    	fflush(stderr);
     	exit(-1);
       // recreateSwapChain();
       return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-      // throw std::runtime_error("failed to acquire swap chain image!");
-      printf("ERROR#2\n");
+      fprintf(stderr, "ERROR#2\n");
+      fflush(stderr);
       exit(-1);
       return;
     }
@@ -124,8 +123,9 @@ public:
     };
 
     if (vkQueueSubmit(_graphicsQueue, 1, &submitInfo, _inFlightFences[_currentFrame]) != VK_SUCCESS) {
-      printf("ERROR#3\n");
-      exit(-1);
+      fprintf(stderr, "ERROR#3\n");
+    	fflush(stderr);
+    	exit(-1);
       return;
     }
 
@@ -144,11 +144,13 @@ public:
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
       // framebufferResized = false;
       // recreateSwapChain();
-      printf("ERROR#4\n");
+      fprintf(stderr, "ERROR#4\n");
+    	fflush(stderr);
       exit(-1);
       return;
     } else if (result != VK_SUCCESS) {
-      printf("ERROR#5\n");
+      fprintf(stderr, "ERROR#5\n");
+    	fflush(stderr);
       exit(-1);
       return;
     }
@@ -165,7 +167,8 @@ private:
     };
 
     if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-      printf("ERROR#6\n");
+      fprintf(stderr, "ERROR#6\n");
+    	fflush(stderr);
       exit(-1);
     }
 
@@ -188,8 +191,9 @@ private:
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-      printf("ERROR#7\n");
-      exit(-1);
+      fprintf(stderr, "ERROR#7\n");
+    	fflush(stderr);
+    	exit(-1);
     }
 	}
 
@@ -350,11 +354,11 @@ private:
     	.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 	    .queueCreateInfoCount = _queueFamilyIndexCount,
 	    .pQueueCreateInfos = queueCreateInfos,
-	    .pEnabledFeatures = &deviceFeatures,
 	    .enabledLayerCount = enabledLayerCount,
 	    .ppEnabledLayerNames = ppEnabledLayerNames,
 	    .enabledExtensionCount = enabledExtensionCount,
 	    .ppEnabledExtensionNames = ppEnabledExtensionNames,
+	    .pEnabledFeatures = &deviceFeatures,
     };
 
     if (vkCreateDevice(_physicalDevice, &createInfo, nullptr, &_logicalDevice) != VK_SUCCESS) {
@@ -396,7 +400,8 @@ private:
     }
 
     // TODO: query VkExtent2D from the surface.
-    printf("Not implemented.\n");
+    fprintf(stderr, "ERROR#8\n");
+    fflush(stderr);
     exit(-1);
 	}
 
@@ -480,10 +485,12 @@ private:
      	.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
      	.viewType = VK_IMAGE_VIEW_TYPE_2D,
      	.format = _swapChainImageFormat,
-     	.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
-     	.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
-     	.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
-     	.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+     	.components = {
+     		.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+     		.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+     		.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+     		.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+     	},
      	.subresourceRange = {
      		.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 	     	.baseMipLevel = 0,
@@ -533,8 +540,8 @@ private:
     	.srcSubpass = VK_SUBPASS_EXTERNAL,
 	    .dstSubpass = 0,
 	    .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-	    .srcAccessMask = 0,
 	    .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+	    .srcAccessMask = 0,
 	    .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
     };
     
@@ -635,8 +642,8 @@ private:
 
     VkPipelineMultisampleStateCreateInfo multisampling {
     	.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-    	.sampleShadingEnable = VK_FALSE,
     	.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+    	.sampleShadingEnable = VK_FALSE,
     };
 
     VkPipelineRasterizationStateCreateInfo rasterizer {
@@ -644,10 +651,10 @@ private:
 	    .depthClampEnable = VK_FALSE,
 	    .rasterizerDiscardEnable = VK_FALSE,
 	    .polygonMode = VK_POLYGON_MODE_FILL,
-	    .lineWidth = 1.0f,
 	    .cullMode = VK_CULL_MODE_BACK_BIT,
 	    .frontFace = VK_FRONT_FACE_CLOCKWISE,
 	    .depthBiasEnable = VK_FALSE,
+	    .lineWidth = 1.0f,
     };
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly {
@@ -657,8 +664,8 @@ private:
     };
 
     VkPipelineColorBlendAttachmentState colorBlendAttachment {
-    	.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
     	.blendEnable = VK_FALSE,
+    	.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
     };
 
     VkPipelineColorBlendStateCreateInfo colorBlending {
