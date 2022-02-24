@@ -74,12 +74,14 @@ private:
 
     uint32_t enabledExtensionCount = 2;
     const char* ppEnabledExtensionNames[] = {
-#if defined OS_MACOSX
+#if defined __APPLE__
     	"VK_EXT_metal_surface",
 #elif defined _WIN32
     	"VK_KHR_win32_surface",
-#elif defined LINUX
+#elif defined __linux__
     	"VK_KHR_xcb_surface",
+#else
+# error Platform not supported.
 #endif
     	"VK_KHR_surface",
     };
