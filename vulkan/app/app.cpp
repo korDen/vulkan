@@ -7,117 +7,505 @@
 
 #define VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME "VK_KHR_portability_subset"
 
+#if defined NDEBUG
+#define CHECK_CURRENT_STATE(X)
+#define POINT_OF_FAILURE(X) X
+#else
+static_assert(__COUNTER__ == 0);
+
+#define CONCAT_IMPL(x, y) x##y
+#define CONCAT(x, y) CONCAT_IMPL(x, y)
+
+#define CHECK_STATE_DEF(var, initState, defValue, fmt) if ((_currentState < initState) != (var == defValue)) { fprintf(stderr, "check failed for %s, currentState: %d, initState: %d, value: " fmt " in %s\n", #var, _currentState, initState, var, function); exit(-1); }
+#define CHECK_STATE(var, initState) CHECK_STATE_DEF(var, initState, nullptr, "%p")
+#define CHECK_CURRENT_STATE(expectedState) if (_currentState != expectedState) { fprintf(stderr, "Expected state %d but _currentState is %d at %s:%d.\n", expectedState, _currentState, __FUNCTION__, __LINE__); exit(-1); } else { checkInvariant(__FUNCTION__); }
+
+#define POINT_OF_FAILURE(method) _pointOfFailure == CONCAT(POINT_OF_FAILURE_, __COUNTER__) ? VK_NOT_READY : method
+
+enum PointOfFailure {
+	NO_FAILURE = 0,
+	POINT_OF_FAILURE_1,
+	POINT_OF_FAILURE_2,
+	POINT_OF_FAILURE_3,
+	POINT_OF_FAILURE_4,
+	POINT_OF_FAILURE_5,
+	POINT_OF_FAILURE_6,
+	POINT_OF_FAILURE_7,
+	POINT_OF_FAILURE_8,
+	POINT_OF_FAILURE_9,
+	POINT_OF_FAILURE_10,
+	POINT_OF_FAILURE_11,
+	POINT_OF_FAILURE_12,
+	POINT_OF_FAILURE_13,
+	POINT_OF_FAILURE_14,
+	POINT_OF_FAILURE_15,
+	POINT_OF_FAILURE_16,
+	POINT_OF_FAILURE_17,
+	POINT_OF_FAILURE_18,
+	POINT_OF_FAILURE_19,
+	POINT_OF_FAILURE_20,
+	POINT_OF_FAILURE_21,
+	POINT_OF_FAILURE_22,
+	POINT_OF_FAILURE_MAX,
+};
+#endif
+
 class MyApplication : public Application {
 public:
 	virtual bool init(ApplicationController* applicationController) override {
+#if !defined NDEBUG
+		checkInvariant(__FUNCTION__);
+#endif
+
 		_applicationController = applicationController;
 	  return true;
 	}
 
-	virtual void term() override {}
-	virtual bool initGraphics() override {
+#if !defined NDEBUG
+	void checkInvariant(const char* function) {
+		if (_enabledLayerCount != 0) {
+			if (_ppEnabledLayerNames == nullptr) {
+				fprintf(stderr, "_enabledLayerCount is not 0 but _ppEnabledLayerNames is nullptr.\n");
+				exit(-1);
+			}
+
+			// Should only be initialized if _currentState is STATE_LAYERS_INITIALIZED or higher.
+			if (_currentState < STATE_LAYERS_INITIALIZED) {
+				fprintf(stderr, "_enabledLayerCount is not 0 but _currentState is %d.\n", _currentState);
+				exit(-1);
+			}
+		} else if (_ppEnabledLayerNames != nullptr) {
+			fprintf(stderr, "_enabledLayerCount is 0 but _ppEnabledLayerNames is not nullptr.\n");
+			exit(-1);
+		}
+
+		CHECK_STATE(_instance, STATE_INSTANCE_CREATED);
+		CHECK_STATE(_surface, STATE_SURFACE_CREATED);
+		CHECK_STATE(_physicalDevice, STATE_PHYSICAL_DEVICE_CREATED);
+		CHECK_STATE(_logicalDevice, STATE_LOGICAL_DEVICE_CREATED);
+		CHECK_STATE_DEF(_queueFamilyIndexCount, STATE_LOGICAL_DEVICE_CREATED, -1, "%d");
+		CHECK_STATE_DEF(_queueFamilyIndices[0], STATE_LOGICAL_DEVICE_CREATED, -1, "%d");
+		CHECK_STATE_DEF(_queueFamilyIndices[1], STATE_LOGICAL_DEVICE_CREATED, -1, "%d");
+		CHECK_STATE(_graphicsQueue, STATE_LOGICAL_DEVICE_CREATED);
+		CHECK_STATE(_presentationQueue, STATE_LOGICAL_DEVICE_CREATED);
+		CHECK_STATE(_swapChain, STATE_SWAP_CHAIN_CREATED);
+		CHECK_STATE_DEF(_swapChainImageFormat, STATE_SWAP_CHAIN_CREATED, VK_FORMAT_UNDEFINED, "%d");
+		CHECK_STATE_DEF(_swapChainExtent.width, STATE_SWAP_CHAIN_CREATED, -1, "%d");
+		CHECK_STATE_DEF(_swapChainExtent.height, STATE_SWAP_CHAIN_CREATED, -1, "%d");
+		CHECK_STATE(_swapChainImageViews, STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED);		
+		CHECK_STATE_DEF(_swapChainImageCount, STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED, -1, "%d");
+		CHECK_STATE(_renderPass, STATE_RENDER_PASS_CREATED);
+		CHECK_STATE(_pipelineLayout, STATE_PIPELINE_LAYOUT_CREATED);
+		CHECK_STATE(_graphicsPipeline, STATE_GRAPHICS_PIPELINE_CREATED);
+		CHECK_STATE(_swapChainFramebuffers, STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED);
+		CHECK_STATE(_commandPool, STATE_COMMAND_POOL_CREATED);
+		CHECK_STATE(_commandBuffers[0], STATE_COMMAND_BUFFERS_CREATED);
+		CHECK_STATE(_commandBuffers[1], STATE_COMMAND_BUFFERS_CREATED);
+		CHECK_STATE(_imageAvailableSemaphores[0], STATE_SYNC_OBJECTS_CREATED);
+		CHECK_STATE(_imageAvailableSemaphores[1], STATE_SYNC_OBJECTS_CREATED);
+		CHECK_STATE(_renderFinishedSemaphores[0], STATE_SYNC_OBJECTS_CREATED);
+		CHECK_STATE(_renderFinishedSemaphores[1], STATE_SYNC_OBJECTS_CREATED);
+		CHECK_STATE(_inFlightFences[0], STATE_SYNC_OBJECTS_CREATED);
+		CHECK_STATE(_inFlightFences[1], STATE_SYNC_OBJECTS_CREATED);	
+	}
+#endif
+
+	bool initialize() {
+		if (!initializeLayers()) {
+			return deinitialize(STATE_UNINITIALIZED);
+		}
+		CHECK_CURRENT_STATE(STATE_LAYERS_INITIALIZED);
+
 	  if (!createInstance()) {
-	  	fprintf(stderr, "failed to create instance.\n");
-	  	return false;
+	  	return deinitialize(STATE_LAYERS_INITIALIZED);
 	  }
+	  CHECK_CURRENT_STATE(STATE_INSTANCE_CREATED);
 
 	  if (!createSurface()) {
-	  	fprintf(stderr, "failed to create surface.\n");
-	  	return false;
+	  	return deinitialize(STATE_INSTANCE_CREATED);
 	  }
+	  CHECK_CURRENT_STATE(STATE_SURFACE_CREATED);
 
 	  if (!pickPhysicalDevice()) {
-	  	fprintf(stderr, "failed to pick physical device.\n");
-	  	return false;
+	  	return deinitialize(STATE_SURFACE_CREATED);
 	  }
+	  CHECK_CURRENT_STATE(STATE_PHYSICAL_DEVICE_CREATED);
 
 	  if (!createLogicalDevice()) {
-	  	fprintf(stderr, "failed to create logical device.\n");
-	  	return false;
+	  	return deinitialize(STATE_PHYSICAL_DEVICE_CREATED);
 	  }
-
-	  if (!createSwapChain()) {
-	  	fprintf(stderr, "failed to create swap chain.\n");
-	  	return false;
-	  }
-
-	  if (!createImageViews()) {
-	  	fprintf(stderr, "failed to create image views.\n");
-	  	return false;
-	  }
-
-	  if (!createRenderPass()) {
-	  	fprintf(stderr, "failed to create render pass.\n");
-	  	return false;
-	  }
-
-	  if (!createGraphicsPipeline()) {
-	  	fprintf(stderr, "failed to create graphics pipeline.\n");
-	  	return false;
-	  }
-
-	  if (!createFramebuffers()) {
-	  	fprintf(stderr, "failed to create frame buffers.\n");
-	  	return false;	
-	  }
+	  CHECK_CURRENT_STATE(STATE_LOGICAL_DEVICE_CREATED);
 
 	  if (!createCommandPool()) {
-	  	fprintf(stderr, "failed to create command pool.\n");
-	  	return false;
+	  	return deinitialize(STATE_LOGICAL_DEVICE_CREATED);
 	  }
+	  CHECK_CURRENT_STATE(STATE_COMMAND_POOL_CREATED);
 
 	  if (!createCommandBuffers()) {
-	  	fprintf(stderr, "failed to create command buffers.\n");
-	  	return false;
+	  	return deinitialize(STATE_COMMAND_POOL_CREATED);
 	  }
+	  CHECK_CURRENT_STATE(STATE_COMMAND_BUFFERS_CREATED);
 
 	  if (!createSyncObjects()) {
-	  	fprintf(stderr, "failed to create sync objects.\n");
-	  	return false;
+	  	return deinitialize(STATE_COMMAND_BUFFERS_CREATED);
 	  }
+	  CHECK_CURRENT_STATE(STATE_SYNC_OBJECTS_CREATED);
 
-	  fprintf(stderr, "init done.\n");
+	  if (!createSwapChain()) {
+	  	return deinitialize(STATE_SYNC_OBJECTS_CREATED);
+	  }
+	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_CREATED);
+
+	  if (!createSwapChainImageViews()) {
+	  	return deinitialize(STATE_SWAP_CHAIN_CREATED);
+	  }
+	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED);
+
+	  if (!createRenderPass()) {
+	  	return deinitialize(STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED);
+	  }
+	  CHECK_CURRENT_STATE(STATE_RENDER_PASS_CREATED);
+
+	  if (!createFramebuffers()) {
+	  	return deinitialize(STATE_RENDER_PASS_CREATED);
+	  }
+	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED);
+
+	  if (!createPipelineLayout()) {
+	  	return deinitialize(STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED);
+	  }
+	  CHECK_CURRENT_STATE(STATE_PIPELINE_LAYOUT_CREATED);
+
+	  if (!createGraphicsPipeline()) {
+	  	return deinitialize(STATE_PIPELINE_LAYOUT_CREATED);
+	  }
+	  CHECK_CURRENT_STATE(STATE_GRAPHICS_PIPELINE_CREATED);
+
 	  return true;
 	}
+
+	void deinitializeLayers() {
+		CHECK_CURRENT_STATE(STATE_LAYERS_INITIALIZED);
+		for (uint32_t i = 0; i < _enabledLayerCount; ++i) {
+			free((char*) _ppEnabledLayerNames[i]);
+		}
+		free(_ppEnabledLayerNames);
+		_enabledLayerCount = 0;
+		_ppEnabledLayerNames = nullptr;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializeLayers");
+#endif
+	}
+
+	void deinitializeInstance() {
+		CHECK_CURRENT_STATE(STATE_INSTANCE_CREATED);
+		vkDestroyInstance(_instance, nullptr);
+		_instance = nullptr;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializeInstance");
+#endif
+	}
+
+	void deinitializeSurface() {
+		CHECK_CURRENT_STATE(STATE_SURFACE_CREATED);
+		// TODO: also destroy associated CAMetalLayer on MacOS.
+		vkDestroySurfaceKHR(_instance, _surface, nullptr);
+		_surface = nullptr;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializeSurface");
+#endif
+	}
+
+	void deinitializePhysicalDevice() {
+		CHECK_CURRENT_STATE(STATE_PHYSICAL_DEVICE_CREATED);
+		_physicalDevice = nullptr;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializePhysicalDevice");
+#endif
+	}
+
+	void deinitializeLogicalDevice() {
+		CHECK_CURRENT_STATE(STATE_LOGICAL_DEVICE_CREATED);
+		vkDestroyDevice(_logicalDevice, nullptr);
+		_logicalDevice = nullptr;
+
+		_queueFamilyIndexCount = 0xFFFFFFFF;
+		_queueFamilyIndices[0] = 0xFFFFFFFF;
+		_queueFamilyIndices[1] = 0xFFFFFFFF;
+		_graphicsQueue = nullptr;
+		_presentationQueue = nullptr;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializeLogicalDevice");
+#endif
+	}
+
+	void deinitializeSwapChain() {
+		CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_CREATED);
+		vkDestroySwapchainKHR(_logicalDevice, _swapChain, nullptr);
+
+		_swapChain = nullptr;
+		_swapChainImageFormat = VK_FORMAT_UNDEFINED;
+		_swapChainExtent.width = 0xFFFFFFFF;
+		_swapChainExtent.height = 0xFFFFFFFF;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializeSwapChain");
+#endif
+	}
+
+	void deinitializeSwapChainImageViews() {
+		CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED);
+		for (uint32_t i = 0; i < _swapChainImageCount; ++i) {
+    	vkDestroyImageView(_logicalDevice, _swapChainImageViews[i], nullptr);
+    }
+    free(_swapChainImageViews);
+    _swapChainImageViews = nullptr;
+    _swapChainImageCount = 0xFFFFFFFF;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializeSwapChainImageViews");
+#endif
+	}
+
+	void deinitializeRenderPass() {
+		CHECK_CURRENT_STATE(STATE_RENDER_PASS_CREATED);
+		vkDestroyRenderPass(_logicalDevice, _renderPass, nullptr);
+		_renderPass = nullptr;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializeRenderPass");
+#endif
+	}
+
+	void deinitializePipelineLayout() {
+		CHECK_CURRENT_STATE(STATE_PIPELINE_LAYOUT_CREATED);
+		vkDestroyPipelineLayout(_logicalDevice, _pipelineLayout, nullptr);
+		_pipelineLayout = nullptr;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializePipelineLayout");
+#endif
+	}
+
+	void deinitializeGraphicsPipeline() {
+		CHECK_CURRENT_STATE(STATE_GRAPHICS_PIPELINE_CREATED);
+		vkDestroyPipeline(_logicalDevice, _graphicsPipeline, nullptr);
+		_graphicsPipeline = nullptr;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializeGraphicsPipeline");
+#endif
+	}
+
+	void deinitializeFramebuffers() {
+		CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED);
+		for (uint32_t i = 0; i < _swapChainImageCount; ++i) {
+			vkDestroyFramebuffer(_logicalDevice, _swapChainFramebuffers[i], nullptr);
+		}
+		free(_swapChainFramebuffers);
+		_swapChainFramebuffers = nullptr;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializeFramebuffers");
+#endif
+	}
+
+	void deinitializeCommandPool() {
+		CHECK_CURRENT_STATE(STATE_COMMAND_POOL_CREATED);
+		vkDestroyCommandPool(_logicalDevice, _commandPool, nullptr);
+		_commandPool = nullptr;
+
+#if !defined NDEBUG
+		--_currentState;
+		checkInvariant("deinitializeCommandPool");
+#endif
+	}
+
+	void deinitializeCommandBuffers() {
+		CHECK_CURRENT_STATE(STATE_COMMAND_BUFFERS_CREATED);
+		vkFreeCommandBuffers(_logicalDevice, _commandPool, MAX_FRAMES_IN_FLIGHT, _commandBuffers);
+		_commandBuffers[0] = nullptr;
+		_commandBuffers[1] = nullptr;
+
+#if !defined NDEBUG
+		--_currentState;
+    checkInvariant("deinitializeCommandBuffers");
+#endif
+	}
+
+	void deinitializeSyncObjects() {
+		CHECK_CURRENT_STATE(STATE_SYNC_OBJECTS_CREATED);
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+      vkDestroySemaphore(_logicalDevice, _renderFinishedSemaphores[i], nullptr);
+      _renderFinishedSemaphores[i] = nullptr;
+
+      vkDestroySemaphore(_logicalDevice, _imageAvailableSemaphores[i], nullptr);
+      _imageAvailableSemaphores[i] = nullptr;
+
+      vkDestroyFence(_logicalDevice, _inFlightFences[i], nullptr);
+      _inFlightFences[i] = nullptr;
+    }
+
+#if !defined NDEBUG
+    --_currentState;
+		checkInvariant("deinitializeSyncObjects");
+#endif
+	}
+
+	bool deinitialize(int currentState) {
+#if !defined NDEBUG
+		if (_currentState != currentState) {
+			fprintf(stderr, "Current state didn't match expected state: %d != %d.\n", _currentState, currentState);
+		}
+		checkInvariant("deinitialize");
+#endif
+
+		switch (currentState) {
+			case STATE_GRAPHICS_PIPELINE_CREATED:
+				deinitializeGraphicsPipeline();
+
+			case STATE_PIPELINE_LAYOUT_CREATED:
+				deinitializePipelineLayout();
+
+			case STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED:
+				deinitializeFramebuffers();
+
+			case STATE_RENDER_PASS_CREATED:
+				deinitializeRenderPass();
+
+			case STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED:
+				deinitializeSwapChainImageViews();
+
+			case STATE_SWAP_CHAIN_CREATED:
+				deinitializeSwapChain();
+
+			case STATE_SYNC_OBJECTS_CREATED:
+				deinitializeSyncObjects();
+
+			case STATE_COMMAND_BUFFERS_CREATED:
+				deinitializeCommandBuffers();
+
+			case STATE_COMMAND_POOL_CREATED:
+				deinitializeCommandPool();
+
+			case STATE_LOGICAL_DEVICE_CREATED:
+				deinitializeLogicalDevice();
+
+			case STATE_PHYSICAL_DEVICE_CREATED:
+				deinitializePhysicalDevice();
+
+			case STATE_SURFACE_CREATED:
+				deinitializeSurface();
+
+			case STATE_INSTANCE_CREATED:
+				deinitializeInstance();
+
+			case STATE_LAYERS_INITIALIZED:
+				deinitializeLayers();
+
+			case STATE_UNINITIALIZED:
+				break;
+		}
+
+		return false;
+	}
+
+	virtual void term() override {}
+	virtual bool initGraphics() override {
+		// _pointOfFailure = NO_FAILURE;
+		// checkInvariant("1");
+		// if (!initialize()) {
+		// 	fprintf(stderr, "initialize() expected to succeed but failed.\n");
+		// 	exit(-1);
+		// }
+		// deinitialize(STATE_GRAPHICS_PIPELINE_CREATED);
+		// checkInvariant("2");
+
+		// for (int i = POINT_OF_FAILURE_1; i < POINT_OF_FAILURE_MAX; ++i) {
+		// 	_pointOfFailure = (PointOfFailure) i;
+
+		// 	checkInvariant("before");
+		// 	if (initialize()) {
+		// 		fprintf(stderr, "Expected to fail initialize, _pointOfFailure: %d.\n", _pointOfFailure);
+		// 		exit(-1);
+		// 	}
+		// 	if (_currentState != STATE_UNINITIALIZED) {
+		// 		fprintf(stderr, "initialize() failed but the state is not STATE_UNINITIALIZED, _pointOfFailure: %d.\n", _pointOfFailure);
+		// 		exit(-1);
+		// 	}
+		// 	checkInvariant("after");
+		// }
+
+		return initialize();
+	}
+
 
 	uint32_t _currentFrame = 0;
 	bool framebufferResized = false;
 
 	virtual void termGraphics() override {
-		destroySwapChain();
+		if (_logicalDevice != nullptr) {
+			// Wait for the device to become available.
+			VkResult result = vkDeviceWaitIdle(_logicalDevice);
+			if (result != VK_SUCCESS) {
+				fprintf(stderr, "vkDeviceWaitIdle returned %d, don't know how to proceed.\n", result);
+				exit(-1);
+			}
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroySemaphore(_logicalDevice, _renderFinishedSemaphores[i], nullptr);
-        vkDestroySemaphore(_logicalDevice, _imageAvailableSemaphores[i], nullptr);
-        vkDestroyFence(_logicalDevice, _inFlightFences[i], nullptr);
-    }
-
-    vkDestroyCommandPool(_logicalDevice, _commandPool, nullptr);
-    vkDestroyDevice(_logicalDevice, nullptr);
-
-    vkDestroySurfaceKHR(_instance, _surface, nullptr);
-    vkDestroyInstance(_instance, nullptr);
+			deinitialize(STATE_GRAPHICS_PIPELINE_CREATED);
+		} else {
+			deinitialize(STATE_UNINITIALIZED);
+		}
 	}
 
 	virtual void renderFrame() override {
-		vkWaitForFences(_logicalDevice, 1, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
+		if (_logicalDevice == nullptr) {
+			// recreateSwapChain() failed?
+			// TODO: attempt to initialize() manually?
+			return;
+		}
+
+		VkResult result = vkWaitForFences(_logicalDevice, 1, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
+		if (result != VK_SUCCESS) {
+			return;
+		}
 
     uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(_logicalDevice, _swapChain, UINT64_MAX, _imageAvailableSemaphores[_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    result = vkAcquireNextImageKHR(_logicalDevice, _swapChain, UINT64_MAX, _imageAvailableSemaphores[_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
       recreateSwapChain();
       return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-      fprintf(stderr, "ERROR#2\n");
-      fflush(stderr);
-      exit(-1);
-      return;
+    	// TODO: implement.
+     return;
     }
 
-    vkResetFences(_logicalDevice, 1, &_inFlightFences[_currentFrame]);
+    result = vkResetFences(_logicalDevice, 1, &_inFlightFences[_currentFrame]);
+    if (result != VK_SUCCESS) {
+    	return;
+    }
 
-    vkResetCommandBuffer(_commandBuffers[_currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
+    result = vkResetCommandBuffer(_commandBuffers[_currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
+    if (result != VK_SUCCESS) {
+    	return;
+    }
     recordCommandBuffer(_commandBuffers[_currentFrame], imageIndex);
 
     VkSemaphore waitSemaphores[] = {_imageAvailableSemaphores[_currentFrame]};
@@ -134,11 +522,9 @@ public:
     	.pSignalSemaphores = signalSemaphores,
     };
 
-    if (vkQueueSubmit(_graphicsQueue, 1, &submitInfo, _inFlightFences[_currentFrame]) != VK_SUCCESS) {
-      fprintf(stderr, "ERROR#3\n");
-    	fflush(stderr);
-    	exit(-1);
-      return;
+    result = vkQueueSubmit(_graphicsQueue, 1, &submitInfo, _inFlightFences[_currentFrame]);
+    if (result != VK_SUCCESS) {
+    	return;
     }
 
     VkSwapchainKHR swapChains[] = {_swapChain};
@@ -152,15 +538,11 @@ public:
     };
 
     result = vkQueuePresentKHR(_presentationQueue, &presentInfo);
-
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
       framebufferResized = false;
       recreateSwapChain();
       return;
     } else if (result != VK_SUCCESS) {
-      fprintf(stderr, "ERROR#5\n");
-    	fflush(stderr);
-      exit(-1);
       return;
     }
 
@@ -170,41 +552,62 @@ public:
 	virtual void resize(float windowWidth, float windowHeight) override {}
 
 private:
-	void destroySwapChain() {
-		vkDeviceWaitIdle(_logicalDevice);
+	bool recreateSwapChain() {
+		VkResult result = vkDeviceWaitIdle(_logicalDevice);
+		if (result != VK_SUCCESS) {
+			fprintf(stderr, "vkDeviceWaitIdle returned %d, don't know how to proceed.\n", result);
+			exit(-1);
+		}
 
-    vkDestroyPipeline(_logicalDevice, _graphicsPipeline, nullptr);
-    vkDestroyPipelineLayout(_logicalDevice, _pipelineLayout, nullptr);
-    vkDestroyRenderPass(_logicalDevice, _renderPass, nullptr);
+		deinitializeGraphicsPipeline();
+		deinitializePipelineLayout();
+		deinitializeFramebuffers();
+		deinitializeRenderPass();
+		deinitializeSwapChainImageViews();
+		deinitializeSwapChain();
 
-    for (uint32_t i = 0; i < _swapChainImageCount; ++i) {
-    	vkDestroyFramebuffer(_logicalDevice, _swapChainFramebuffers[i], nullptr);
-    	vkDestroyImageView(_logicalDevice, _swapChainImageViews[i], nullptr);
+		CHECK_CURRENT_STATE(STATE_SYNC_OBJECTS_CREATED);
+    if (!createSwapChain()) {
+    	return deinitialize(STATE_SYNC_OBJECTS_CREATED);
     }
-    free(_swapChainFramebuffers);
-    free(_swapChainImageViews);
 
-    vkDestroySwapchainKHR(_logicalDevice, _swapChain, nullptr);
+	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_CREATED);
+	  if (!createSwapChainImageViews()) {
+	  	return deinitialize(STATE_SWAP_CHAIN_CREATED);
+	  }
+
+	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED);
+	  if (!createRenderPass()) {
+	  	return deinitialize(STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED);
+	  }
+
+	  CHECK_CURRENT_STATE(STATE_RENDER_PASS_CREATED);
+	  if (!createFramebuffers()) {
+	  	return deinitialize(STATE_RENDER_PASS_CREATED);
+	  }
+
+	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED);
+	  if (!createPipelineLayout()) {
+	  	return deinitialize(STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED);
+	  }
+
+	  CHECK_CURRENT_STATE(STATE_PIPELINE_LAYOUT_CREATED);
+	  if (!createGraphicsPipeline()) {
+	  	return deinitialize(STATE_PIPELINE_LAYOUT_CREATED);
+	  }
+
+	  CHECK_CURRENT_STATE(STATE_GRAPHICS_PIPELINE_CREATED);
+	  return true;
 	}
 
-	void recreateSwapChain() {
-		destroySwapChain();
-    createSwapChain();
-    createImageViews();
-    createRenderPass();
-    createGraphicsPipeline();
-    createFramebuffers();
-	}
-
-	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+	bool recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     VkCommandBufferBeginInfo beginInfo {
     	.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
     };
 
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-      fprintf(stderr, "ERROR#6\n");
-    	fflush(stderr);
-      exit(-1);
+    VkResult result = vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS) {
+      return false;
     }
 
     VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
@@ -225,14 +628,79 @@ private:
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
 
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-      fprintf(stderr, "ERROR#7\n");
-    	fflush(stderr);
-    	exit(-1);
+    result = vkEndCommandBuffer(commandBuffer);
+    if (result != VK_SUCCESS) {
+    	return false;
     }
+
+    return true;
+	}
+
+	bool advanceState(int newState, const char* function) {
+#if !defined NDEBUG
+		if (newState != _currentState + 1) {
+			fprintf(stderr, "Cannot advance from state %d to state %d\n", _currentState, newState);
+			exit(-1);
+		}
+
+		_currentState = newState;
+		checkInvariant(function);
+#endif
+		return true;
+	}
+
+	bool initializeLayers() {
+#if defined NDEBUG
+		return true;
+#else
+		CHECK_CURRENT_STATE(STATE_UNINITIALIZED);
+
+		uint32_t layerCount;
+    VkResult result = POINT_OF_FAILURE(vkEnumerateInstanceLayerProperties)(&layerCount, nullptr);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
+
+    if (layerCount != 0) {
+    	VkLayerProperties* props = (VkLayerProperties*) malloc(layerCount * sizeof(VkLayerProperties));
+	    result = POINT_OF_FAILURE(vkEnumerateInstanceLayerProperties)(&layerCount, props);
+	    if (result != VK_SUCCESS) {
+	    	free(props);
+	    	return false;
+	    }
+
+    	uint32_t enabledLayerCount = 0;
+	    const char** enabledLayerNames = (const char**) malloc(layerCount * sizeof(const char*));
+	    
+	    // Enable all except blackisted layers that we are not interested in.
+	    for (uint32_t i = 0; i < layerCount; ++i) {
+	    	const char* layerName = props[i].layerName;
+	    	if (strcmp("VK_LAYER_LUNARG_device_simulation", layerName) == 0 ||
+	    			strcmp("VK_LAYER_LUNARG_gfxreconstruct", layerName) == 0) {
+	    		continue;
+	    	}
+
+	    	enabledLayerNames[enabledLayerCount] = strdup(layerName);
+	    	++enabledLayerCount;
+	    }
+
+	    if (enabledLayerCount == 0) {
+	    	free(enabledLayerNames);
+	    } else {
+	    	_enabledLayerCount = enabledLayerCount;
+	    	_ppEnabledLayerNames = enabledLayerNames;
+	    }
+
+	    free(props);
+	  }
+
+    return advanceState(STATE_LAYERS_INITIALIZED, __FUNCTION__);
+#endif
 	}
 
 	bool createInstance() {
+		CHECK_CURRENT_STATE(STATE_LAYERS_INITIALIZED);
+
 		VkApplicationInfo appInfo {
 			.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
       .pApplicationName = "Hello Triangle",
@@ -241,25 +709,6 @@ private:
       .engineVersion = VK_MAKE_VERSION(1, 0, 0),
       .apiVersion = VK_API_VERSION_1_1,
 		};
-
-		uint32_t layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
-    VkLayerProperties* props = (VkLayerProperties*) malloc(layerCount * sizeof(VkLayerProperties));
-    vkEnumerateInstanceLayerProperties(&layerCount, props);
-
-    _enabledLayerCount = 0;
-    _ppEnabledLayerNames = (const char**) malloc(layerCount * sizeof(const char*));
-    for (uint32_t i = 0; i < layerCount; ++i) {
-    	const char* layerName = props[i].layerName;
-    	if (strcmp("VK_LAYER_LUNARG_device_simulation", layerName) == 0 ||
-    			strcmp("VK_LAYER_LUNARG_gfxreconstruct", layerName) == 0) {
-    		continue;
-    	}
-
-    	_ppEnabledLayerNames[_enabledLayerCount] = strdup(layerName);
-    	++_enabledLayerCount;
-    }
 
     uint32_t enabledExtensionCount = 2;
     const char* ppEnabledExtensionNames[] = {
@@ -284,50 +733,74 @@ private:
     	.ppEnabledExtensionNames = ppEnabledExtensionNames,
     };
 
-    VkResult result = vkCreateInstance(&createInfo, nullptr, &_instance);
-    free(props);
+    VkResult result = POINT_OF_FAILURE(vkCreateInstance)(&createInfo, nullptr, &_instance);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
 
-    return result == VK_SUCCESS;
+    return advanceState(STATE_INSTANCE_CREATED, __FUNCTION__);
 	}
 
 	bool createSurface() {
-    return _applicationController->createSurface(_instance, &_surface);
+		CHECK_CURRENT_STATE(STATE_INSTANCE_CREATED);
+    if (!_applicationController->createSurface(_instance, &_surface)) {
+    	return false;
+    }
+
+    return advanceState(STATE_SURFACE_CREATED, __FUNCTION__);
 	}
 
 	bool pickPhysicalDevice() {
+		CHECK_CURRENT_STATE(STATE_SURFACE_CREATED);
 		uint32_t deviceCount = 0;
-		vkEnumeratePhysicalDevices(_instance, &deviceCount, nullptr);
+		VkResult result = POINT_OF_FAILURE(vkEnumeratePhysicalDevices)(_instance, &deviceCount, nullptr);
+		if (result != VK_SUCCESS) {
+			return false;
+		}
 
 		if (deviceCount == 0) {
-      printf("failed to find GPUs with Vulkan support!\n");
       return false;
     }
 
-		// For now, skip capabilities check and just return the first device available.
-    vkEnumeratePhysicalDevices(_instance, &deviceCount, &_physicalDevice);
-    return true;
+		VkPhysicalDevice* devices = (VkPhysicalDevice*) malloc(deviceCount * sizeof(VkPhysicalDevice));
+    result = POINT_OF_FAILURE(vkEnumeratePhysicalDevices)(_instance, &deviceCount, devices);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
+
+    // For now, skip capabilities check and just return the first device available.
+		// deviceCount *must* be set to 1 so that we don't overwrite memory beyond _physicalDevice.
+    _physicalDevice = devices[0];
+    free(devices);
+
+    return advanceState(STATE_PHYSICAL_DEVICE_CREATED, __FUNCTION__);
 	}
 
 	bool createLogicalDevice() {
+		CHECK_CURRENT_STATE(STATE_PHYSICAL_DEVICE_CREATED);
 		uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(_physicalDevice, &queueFamilyCount, nullptr);
 
     VkQueueFamilyProperties* props = (VkQueueFamilyProperties*) malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
     vkGetPhysicalDeviceQueueFamilyProperties(_physicalDevice, &queueFamilyCount, props);
 
-    _queueFamilyIndexCount = 2;
+    uint32_t queueFamilyIndexCount = 2;
     VkDeviceQueueCreateInfo queueCreateInfos[2] = {};
 
     bool foundGraphicsQueue = false;
     bool foundPresentationQueue = false;
 
     float queuePriority = 1.0f;
+    uint32_t queueFamilyIndices[2];
     for (uint32_t i = 0; i < queueFamilyCount; ++i) {
     	VkQueueFamilyProperties& prop = props[i]; 
     	bool supportsGraphics = (prop.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
 
     	VkBool32 supportsPresentation = false;
-      vkGetPhysicalDeviceSurfaceSupportKHR(_physicalDevice, i, _surface, &supportsPresentation);
+      VkResult result = POINT_OF_FAILURE(vkGetPhysicalDeviceSurfaceSupportKHR)(_physicalDevice, i, _surface, &supportsPresentation);
+      if (result != VK_SUCCESS) {
+      	return false;
+      }
 
       if (supportsGraphics) {
       	foundGraphicsQueue = true;
@@ -340,21 +813,21 @@ private:
 	        queueCreateInfos[0].queueFamilyIndex = i;
 	        queueCreateInfos[0].queueCount = 1;
 	        queueCreateInfos[0].pQueuePriorities = &queuePriority;
-	        _queueFamilyIndices[0] = i;
-	        _queueFamilyIndices[1] = i;
-	        _queueFamilyIndexCount = 1;
+	        queueFamilyIndices[0] = i;
+	        queueFamilyIndices[1] = i;
+	        queueFamilyIndexCount = 1;
 	      	break;
       	}
 
       	foundGraphicsQueue = true;
-      	_queueFamilyIndices[0] = i;
+      	queueFamilyIndices[0] = i;
     		queueCreateInfos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
         queueCreateInfos[0].queueFamilyIndex = i;
         queueCreateInfos[0].queueCount = 1;
         queueCreateInfos[0].pQueuePriorities = &queuePriority;
       } else if (supportsPresentation) {
       	foundPresentationQueue = true;
-      	_queueFamilyIndices[1] = i;
+      	queueFamilyIndices[1] = i;
       	queueCreateInfos[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 	      queueCreateInfos[1].queueFamilyIndex = i;
 	      queueCreateInfos[1].queueCount = 1;
@@ -368,10 +841,16 @@ private:
     }
 
     uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(_physicalDevice, nullptr, &extensionCount, nullptr);
+    VkResult result = POINT_OF_FAILURE(vkEnumerateDeviceExtensionProperties)(_physicalDevice, nullptr, &extensionCount, nullptr);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
 
     VkExtensionProperties* extProps = (VkExtensionProperties*) malloc(extensionCount * sizeof(VkExtensionProperties));
-    vkEnumerateDeviceExtensionProperties(_physicalDevice, nullptr, &extensionCount, extProps);
+    result = POINT_OF_FAILURE(vkEnumerateDeviceExtensionProperties)(_physicalDevice, nullptr, &extensionCount, extProps);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
 
     const char* ppEnabledExtensionNames[] = {
     	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -388,7 +867,7 @@ private:
     VkPhysicalDeviceFeatures deviceFeatures{};
     VkDeviceCreateInfo createInfo {
     	.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-	    .queueCreateInfoCount = _queueFamilyIndexCount,
+	    .queueCreateInfoCount = queueFamilyIndexCount,
 	    .pQueueCreateInfos = queueCreateInfos,
 	    .enabledLayerCount = _enabledLayerCount,
 	    .ppEnabledLayerNames = _ppEnabledLayerNames,
@@ -397,15 +876,24 @@ private:
 	    .pEnabledFeatures = &deviceFeatures,
     };
 
-    if (vkCreateDevice(_physicalDevice, &createInfo, nullptr, &_logicalDevice) != VK_SUCCESS) {
-    	fprintf(stderr, "Failed to create logical device.");
+    result = POINT_OF_FAILURE(vkCreateDevice)(_physicalDevice, &createInfo, nullptr, &_logicalDevice);
+    if (result != VK_SUCCESS) {
     	return false;
     }
 
-    vkGetDeviceQueue(_logicalDevice, _queueFamilyIndices[0], 0, &_graphicsQueue);
-    vkGetDeviceQueue(_logicalDevice, _queueFamilyIndices[1], 0, &_presentationQueue);
+    _queueFamilyIndexCount = queueFamilyIndexCount;
+    _queueFamilyIndices[0] = queueFamilyIndices[0];
+    _queueFamilyIndices[1] = queueFamilyIndices[1];
 
-    return true;
+    vkGetDeviceQueue(_logicalDevice, queueFamilyIndices[0], 0, &_graphicsQueue);
+
+    if (queueFamilyIndexCount == 1) {
+    	_presentationQueue = _graphicsQueue;
+    } else {
+    	vkGetDeviceQueue(_logicalDevice, _queueFamilyIndices[1], 0, &_presentationQueue);	
+    }
+    
+    return advanceState(STATE_LOGICAL_DEVICE_CREATED, __FUNCTION__);
 	}
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* candidates, uint32_t numCandidates) {
@@ -442,34 +930,52 @@ private:
 	}
 
 	bool createSwapChain() {
+		CHECK_CURRENT_STATE(STATE_SYNC_OBJECTS_CREATED);
+
     uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(_physicalDevice, _surface, &formatCount, nullptr);
+    VkResult result = POINT_OF_FAILURE(vkGetPhysicalDeviceSurfaceFormatsKHR)(_physicalDevice, _surface, &formatCount, nullptr);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
 
     if (formatCount == 0) {
     	return false;
     }
 
     VkSurfaceFormatKHR* formats = (VkSurfaceFormatKHR*) malloc(formatCount * sizeof(VkSurfaceFormatKHR));
-    vkGetPhysicalDeviceSurfaceFormatsKHR(_physicalDevice, _surface, &formatCount, formats);
+    result = POINT_OF_FAILURE(vkGetPhysicalDeviceSurfaceFormatsKHR)(_physicalDevice, _surface, &formatCount, formats);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
 
     VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(formats, formatCount);
     free(formats);
 
     uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(_physicalDevice, _surface, &presentModeCount, nullptr);
+    result = POINT_OF_FAILURE(vkGetPhysicalDeviceSurfacePresentModesKHR)(_physicalDevice, _surface, &presentModeCount, nullptr);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
 
     if (presentModeCount == 0) {
     	return false;
     }
 
     VkPresentModeKHR* presentModes = (VkPresentModeKHR*) malloc(presentModeCount * sizeof(VkPresentModeKHR));
-    vkGetPhysicalDeviceSurfacePresentModesKHR(_physicalDevice, _surface, &presentModeCount, presentModes);
+    result = POINT_OF_FAILURE(vkGetPhysicalDeviceSurfacePresentModesKHR)(_physicalDevice, _surface, &presentModeCount, presentModes);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
 
     VkPresentModeKHR presentMode = chooseSwapPresentMode(presentModes, presentModeCount);
     free(presentModes);
 
     VkSurfaceCapabilitiesKHR capabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_physicalDevice, _surface, &capabilities);
+    result = POINT_OF_FAILURE(vkGetPhysicalDeviceSurfaceCapabilitiesKHR)(_physicalDevice, _surface, &capabilities);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
+
     VkExtent2D extent = chooseSwapExtent(capabilities);
 
     uint32_t imageCount = capabilities.minImageCount + 1;
@@ -500,23 +1006,33 @@ private:
         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     }
 
-    if (vkCreateSwapchainKHR(_logicalDevice, &createInfo, nullptr, &_swapChain) != VK_SUCCESS) {
-        return false;
+    result = POINT_OF_FAILURE(vkCreateSwapchainKHR)(_logicalDevice, &createInfo, nullptr, &_swapChain);
+    if (result != VK_SUCCESS) {
+    	return false;
     }
 
     _swapChainImageFormat = surfaceFormat.format;
     _swapChainExtent = extent;
 
-    return true;
+    return advanceState(STATE_SWAP_CHAIN_CREATED, __FUNCTION__);
 	}
 
-	bool createImageViews() {
-		vkGetSwapchainImagesKHR(_logicalDevice, _swapChain, &_swapChainImageCount, nullptr);
+	bool createSwapChainImageViews() {
+		CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_CREATED);
 
-		VkImage* swapChainImages = (VkImage*) malloc(_swapChainImageCount * sizeof(VkImage));
-    vkGetSwapchainImagesKHR(_logicalDevice, _swapChain, &_swapChainImageCount, swapChainImages);
+		uint32_t swapChainImageCount;
+		VkResult result = POINT_OF_FAILURE(vkGetSwapchainImagesKHR)(_logicalDevice, _swapChain, &swapChainImageCount, nullptr);
+		if (result != VK_SUCCESS) {
+    	return false;
+    }
+
+		VkImage* swapChainImages = (VkImage*) malloc(swapChainImageCount * sizeof(VkImage));
+    result = POINT_OF_FAILURE(vkGetSwapchainImagesKHR)(_logicalDevice, _swapChain, &swapChainImageCount, swapChainImages);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
 		
-		_swapChainImageViews = (VkImageView*) malloc(_swapChainImageCount * sizeof(VkImageView));
+		VkImageView* swapChainImageViews = (VkImageView*) malloc(swapChainImageCount * sizeof(VkImageView));
 		VkImageViewCreateInfo createInfo {
      	.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
      	.viewType = VK_IMAGE_VIEW_TYPE_2D,
@@ -536,19 +1052,31 @@ private:
      	},
     };
 
-    for (uint32_t i = 0; i < _swapChainImageCount; i++) {
+    for (uint32_t i = 0; i < swapChainImageCount; i++) {
         createInfo.image = swapChainImages[i];
 
-        if (vkCreateImageView(_logicalDevice, &createInfo, nullptr, &_swapChainImageViews[i]) != VK_SUCCESS) {
-            return false;
+        VkResult result = POINT_OF_FAILURE(vkCreateImageView)(_logicalDevice, &createInfo, nullptr, &swapChainImageViews[i]);
+        if (result != VK_SUCCESS) {
+        	// Destroy all swapChain ImageViews that we may have created.
+        	for (uint32_t j = 0; j < i; ++j) {
+        		vkDestroyImageView(_logicalDevice, swapChainImageViews[j], nullptr);
+        	}
+        	free(swapChainImageViews);
+        	free(swapChainImages);
+          return false;
         }
     }
 
     free(swapChainImages);
-    return true;
+
+    _swapChainImageCount = swapChainImageCount;
+    _swapChainImageViews = swapChainImageViews;
+    return advanceState(STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED, __FUNCTION__);
 	}
 
 	bool createRenderPass() {
+		CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED);
+
 		VkAttachmentDescription colorAttachment {
 			.format = _swapChainImageFormat,
 	    .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -591,7 +1119,12 @@ private:
 	    .pDependencies = &dependency,
     };
 
-    return vkCreateRenderPass(_logicalDevice, &renderPassInfo, nullptr, &_renderPass) == VK_SUCCESS;
+    VkResult result = POINT_OF_FAILURE(vkCreateRenderPass)(_logicalDevice, &renderPassInfo, nullptr, &_renderPass);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
+
+    return advanceState(STATE_RENDER_PASS_CREATED, __FUNCTION__);
 	}
 
 	bool createShaderModule(const char* fileName, VkShaderModule* shaderModule) {
@@ -604,22 +1137,34 @@ private:
       .pCode = reinterpret_cast<const uint32_t*>(code),
     };
 
-    VkResult result = vkCreateShaderModule(_logicalDevice, &createInfo, nullptr, shaderModule);
+    VkResult result = POINT_OF_FAILURE(vkCreateShaderModule)(_logicalDevice, &createInfo, nullptr, shaderModule);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
     free(code);
 
-    return result == VK_SUCCESS;
+    return true;
   }
 
-	bool createGraphicsPipeline() {
+  bool createPipelineLayout() {
+  	CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED);
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo {
     	.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
     	.setLayoutCount = 0,
     	.pushConstantRangeCount = 0,
     };
 
-    if (vkCreatePipelineLayout(_logicalDevice, &pipelineLayoutInfo, nullptr, &_pipelineLayout) != VK_SUCCESS) {
-      return false;
+    VkResult result = POINT_OF_FAILURE(vkCreatePipelineLayout)(_logicalDevice, &pipelineLayoutInfo, nullptr, &_pipelineLayout);
+    if (result != VK_SUCCESS) {
+    	return false;
     }
+
+    return advanceState(STATE_PIPELINE_LAYOUT_CREATED, __FUNCTION__);
+  }
+
+	bool createGraphicsPipeline() {
+		CHECK_CURRENT_STATE(STATE_PIPELINE_LAYOUT_CREATED);
 
     VkShaderModule vertShaderModule;
 		if (!createShaderModule("vert.spv", &vertShaderModule)) {
@@ -628,6 +1173,7 @@ private:
 
 		VkShaderModule fragShaderModule;
 		if (!createShaderModule("frag.spv", &fragShaderModule)) {
+			vkDestroyShaderModule(_logicalDevice, vertShaderModule, nullptr);
 			return false;
 		}
 
@@ -656,8 +1202,8 @@ private:
     VkViewport viewport {
     	.x = 0.0f,
 	    .y = 0.0f,
-	    .width = (float) _swapChainExtent.width,
-	    .height = (float) _swapChainExtent.height,
+	    .width = static_cast<float>(_swapChainExtent.width),
+	    .height = static_cast<float>(_swapChainExtent.height),
 	    .minDepth = 0.0f,
 	    .maxDepth = 1.0f,	
     };
@@ -728,15 +1274,19 @@ private:
 	    .basePipelineHandle = VK_NULL_HANDLE,
     };
     
-    VkResult result = vkCreateGraphicsPipelines(_logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_graphicsPipeline);
-
+    VkResult result = POINT_OF_FAILURE(vkCreateGraphicsPipelines)(_logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_graphicsPipeline);
     vkDestroyShaderModule(_logicalDevice, fragShaderModule, nullptr);
     vkDestroyShaderModule(_logicalDevice, vertShaderModule, nullptr);
+    if (result != VK_SUCCESS) {
+    	return false;
+    }
 
-    return result == VK_SUCCESS;
+    return advanceState(STATE_GRAPHICS_PIPELINE_CREATED, __FUNCTION__);
 	}
 
 	bool createFramebuffers() {
+		CHECK_CURRENT_STATE(STATE_RENDER_PASS_CREATED);
+
 		_swapChainFramebuffers = (VkFramebuffer*) malloc(_swapChainImageCount * sizeof(VkFramebuffer));
 
 		VkFramebufferCreateInfo framebufferInfo {
@@ -757,20 +1307,26 @@ private:
       }
     }
 
-    return true;
+    return advanceState(STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED, __FUNCTION__);
 	}
 
 	bool createCommandPool() {
+		CHECK_CURRENT_STATE(STATE_LOGICAL_DEVICE_CREATED);
 		VkCommandPoolCreateInfo poolInfo {
 	    .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 	    .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 	    .queueFamilyIndex = _queueFamilyIndices[0],
 	  };
 
-    return vkCreateCommandPool(_logicalDevice, &poolInfo, nullptr, &_commandPool) == VK_SUCCESS;
+    if (vkCreateCommandPool(_logicalDevice, &poolInfo, nullptr, &_commandPool) != VK_SUCCESS) {
+    	return false;
+    }
+    return advanceState(STATE_COMMAND_POOL_CREATED, __FUNCTION__);
 	}
 
 	bool createCommandBuffers() {
+		CHECK_CURRENT_STATE(STATE_COMMAND_POOL_CREATED);
+
     VkCommandBufferAllocateInfo allocInfo {
     	.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 	    .commandPool = _commandPool,
@@ -778,10 +1334,16 @@ private:
 	    .commandBufferCount = MAX_FRAMES_IN_FLIGHT,
     };
 
-    return vkAllocateCommandBuffers(_logicalDevice, &allocInfo, _commandBuffers) == VK_SUCCESS;
+    if (vkAllocateCommandBuffers(_logicalDevice, &allocInfo, _commandBuffers) != VK_SUCCESS) {
+    	return false;
+    }
+
+    return advanceState(STATE_COMMAND_BUFFERS_CREATED, __FUNCTION__);
 	}
 
 	bool createSyncObjects() {
+		CHECK_CURRENT_STATE(STATE_COMMAND_BUFFERS_CREATED);
+
     VkSemaphoreCreateInfo semaphoreInfo {
     	.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
@@ -799,38 +1361,74 @@ private:
         }
     }
 
-    return true;
+    return advanceState(STATE_SYNC_OBJECTS_CREATED, __FUNCTION__);
 	}
 
 	enum {
 		MAX_FRAMES_IN_FLIGHT = 2,
 	};
 
+	enum {
+		STATE_UNINITIALIZED,
+		STATE_LAYERS_INITIALIZED,
+		STATE_INSTANCE_CREATED,
+		STATE_SURFACE_CREATED,
+		STATE_PHYSICAL_DEVICE_CREATED,
+		STATE_LOGICAL_DEVICE_CREATED,
+		STATE_COMMAND_POOL_CREATED,
+		STATE_COMMAND_BUFFERS_CREATED,
+		STATE_SYNC_OBJECTS_CREATED,
+		STATE_SWAP_CHAIN_CREATED,
+		STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED,
+		STATE_RENDER_PASS_CREATED,
+		STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED,
+		STATE_PIPELINE_LAYOUT_CREATED,
+		STATE_GRAPHICS_PIPELINE_CREATED,
+	};
+
 	ApplicationController* _applicationController;
-	VkInstance _instance;
-	VkSurfaceKHR _surface;
-	VkPhysicalDevice _physicalDevice;
-	VkDevice _logicalDevice;
-	VkSwapchainKHR _swapChain;
-	VkImageView* _swapChainImageViews;
-	VkFormat _swapChainImageFormat;
-	VkExtent2D _swapChainExtent;
-	VkRenderPass _renderPass;
-	VkPipelineLayout _pipelineLayout;
-	VkPipeline _graphicsPipeline;
-	VkFramebuffer* _swapChainFramebuffers;
-	VkCommandPool _commandPool;
-	VkCommandBuffer _commandBuffers[MAX_FRAMES_IN_FLIGHT];
-	VkSemaphore _imageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
-  VkSemaphore _renderFinishedSemaphores[MAX_FRAMES_IN_FLIGHT];
-  VkFence _inFlightFences[MAX_FRAMES_IN_FLIGHT];
-  VkQueue _graphicsQueue;
-  VkQueue _presentationQueue;
-	uint32_t _swapChainImageCount;
-	uint32_t _queueFamilyIndexCount;
-	uint32_t _queueFamilyIndices[2];
-	uint32_t _enabledLayerCount;
-  const char** _ppEnabledLayerNames;
+
+#if !defined NDEBUG
+	uint32_t _currentState {STATE_UNINITIALIZED};
+	PointOfFailure _pointOfFailure { NO_FAILURE };
+#endif
+
+	VkInstance _instance {nullptr};
+	VkSurfaceKHR _surface {nullptr};
+	VkPhysicalDevice _physicalDevice {nullptr};
+	VkDevice _logicalDevice {nullptr};
+	VkQueue _graphicsQueue { nullptr };
+  VkQueue _presentationQueue { nullptr };
+	VkSwapchainKHR _swapChain {nullptr};
+	VkImageView* _swapChainImageViews {nullptr};
+	VkFormat _swapChainImageFormat {VK_FORMAT_UNDEFINED};
+	VkExtent2D _swapChainExtent {0xFFFFFFFF, 0xFFFFFFFF};
+	VkRenderPass _renderPass {nullptr};
+	VkPipelineLayout _pipelineLayout {nullptr};
+	VkPipeline _graphicsPipeline {nullptr};
+	VkFramebuffer* _swapChainFramebuffers {nullptr};
+	VkCommandPool _commandPool {nullptr};
+	VkCommandBuffer _commandBuffers[MAX_FRAMES_IN_FLIGHT] {
+		nullptr,
+		nullptr,
+	};
+	VkSemaphore _imageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT] {
+		nullptr,
+		nullptr,
+	};
+  VkSemaphore _renderFinishedSemaphores[MAX_FRAMES_IN_FLIGHT] {
+  	nullptr,
+  	nullptr,
+  };
+  VkFence _inFlightFences[MAX_FRAMES_IN_FLIGHT] {
+  	nullptr,
+  	nullptr,
+  };
+	uint32_t _swapChainImageCount {0xFFFFFFFF};
+	uint32_t _queueFamilyIndexCount {0xFFFFFFFF};
+	uint32_t _queueFamilyIndices[2] {0xFFFFFFFF, 0xFFFFFFFF};
+	uint32_t _enabledLayerCount {0};
+  const char** _ppEnabledLayerNames {nullptr};
 };
 
 Application* createApplication() {
