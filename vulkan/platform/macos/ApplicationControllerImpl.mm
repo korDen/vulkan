@@ -22,14 +22,16 @@ void ApplicationControllerImpl::resize(CGFloat windowWidth, CGFloat windowHeight
 
 bool ApplicationControllerImpl::renderFrame() {
   if (!_canRender) {
-    return false;
+    _canRender = _app->initGraphics();
+    if (!_canRender) {
+      return false;
+    }
   }
 
   _redrawScheduled = false;
   _drawing = true;
   _app->renderFrame();
   _drawing = false;
-
   return true;
 }
 
@@ -93,32 +95,6 @@ bool createMetalSurface(VkInstance instance, CALayer* layer, VkSurfaceKHR* surfa
     return vkCreateMetalSurfaceEXT(instance, &sci, nullptr, surface) == VK_SUCCESS;
 }
 
-typedef VkFlags VkMacOSSurfaceCreateFlagsMVK;
-
-typedef struct VkMacOSSurfaceCreateInfoMVK
-{
-    VkStructureType                 sType;
-    const void*                     pNext;
-    VkMacOSSurfaceCreateFlagsMVK    flags;
-    const void*                     pView;
-} VkMacOSSurfaceCreateInfoMVK;
-
-typedef VkResult (APIENTRY *PFN_vkCreateMacOSSurfaceMVK)(VkInstance,const VkMacOSSurfaceCreateInfoMVK*,const VkAllocationCallbacks*,VkSurfaceKHR*);
-
-bool createMetalSurfaceFallback(VkInstance instance, CALayer* layer, VkSurfaceKHR* surface) {
-	VkMacOSSurfaceCreateInfoMVK sci {
-		.sType = VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK,
-		.pView = (__bridge void*) layer,
-	};
-
-    PFN_vkCreateMacOSSurfaceMVK vkCreateMacOSSurfaceMVK = (PFN_vkCreateMacOSSurfaceMVK) vkGetInstanceProcAddr(instance, "vkCreateMacOSSurfaceMVK");
-    if (vkCreateMacOSSurfaceMVK == nullptr) {
-    	return false;
-    }
-
-    return vkCreateMacOSSurfaceMVK(instance, &sci, nullptr, surface) == VK_SUCCESS;
-}
-
 bool ApplicationController::createSurface(VkInstance instance, VkSurfaceKHR* surface) {
 	ApplicationControllerImpl* impl = (ApplicationControllerImpl*) this;
 	CALayer* layer = [[CAMetalLayer alloc] init];
@@ -128,10 +104,17 @@ bool ApplicationController::createSurface(VkInstance instance, VkSurfaceKHR* sur
 	[view setLayer:layer];
   [view setWantsLayer:YES];
 
-  return createMetalSurface(instance, layer, surface) || createMetalSurfaceFallback(instance, layer, surface);
+  return createMetalSurface(instance, layer, surface);
 }
 
-struct foo{};
+void ApplicationController::getFramebufferSize(double* width, double* height) {
+  ApplicationControllerImpl* impl = (ApplicationControllerImpl*) this;
+  NSView* view = impl->_view;
+  NSRect fbRect = [view convertRectToBacking:[view frame]];
+
+  *width = fbRect.size.width;
+  *height = fbRect.size.height;
+}
 
 void* ApplicationController::readFile(const char* fileName, uint64_t* size) {
   NSString* resourcePath = [[NSBundle mainBundle] resourcePath];

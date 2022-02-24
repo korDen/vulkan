@@ -83,7 +83,22 @@ public:
 	uint32_t _currentFrame = 0;
 	bool framebufferResized = false;
 
-	virtual void termGraphics() override {}
+	virtual void termGraphics() override {
+		destroySwapChain();
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroySemaphore(_logicalDevice, _renderFinishedSemaphores[i], nullptr);
+        vkDestroySemaphore(_logicalDevice, _imageAvailableSemaphores[i], nullptr);
+        vkDestroyFence(_logicalDevice, _inFlightFences[i], nullptr);
+    }
+
+    vkDestroyCommandPool(_logicalDevice, _commandPool, nullptr);
+    vkDestroyDevice(_logicalDevice, nullptr);
+
+    vkDestroySurfaceKHR(_instance, _surface, nullptr);
+    vkDestroyInstance(_instance, nullptr);
+	}
+
 	virtual void renderFrame() override {
 		vkWaitForFences(_logicalDevice, 1, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -91,10 +106,7 @@ public:
     VkResult result = vkAcquireNextImageKHR(_logicalDevice, _swapChain, UINT64_MAX, _imageAvailableSemaphores[_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-    	fprintf(stderr, "ERROR\n");
-    	fflush(stderr);
-    	exit(-1);
-      // recreateSwapChain();
+      recreateSwapChain();
       return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
       fprintf(stderr, "ERROR#2\n");
@@ -142,11 +154,8 @@ public:
     result = vkQueuePresentKHR(_presentationQueue, &presentInfo);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
-      // framebufferResized = false;
-      // recreateSwapChain();
-      fprintf(stderr, "ERROR#4\n");
-    	fflush(stderr);
-      exit(-1);
+      framebufferResized = false;
+      recreateSwapChain();
       return;
     } else if (result != VK_SUCCESS) {
       fprintf(stderr, "ERROR#5\n");
@@ -161,6 +170,32 @@ public:
 	virtual void resize(float windowWidth, float windowHeight) override {}
 
 private:
+	void destroySwapChain() {
+		vkDeviceWaitIdle(_logicalDevice);
+
+    vkDestroyPipeline(_logicalDevice, _graphicsPipeline, nullptr);
+    vkDestroyPipelineLayout(_logicalDevice, _pipelineLayout, nullptr);
+    vkDestroyRenderPass(_logicalDevice, _renderPass, nullptr);
+
+    for (uint32_t i = 0; i < _swapChainImageCount; ++i) {
+    	vkDestroyFramebuffer(_logicalDevice, _swapChainFramebuffers[i], nullptr);
+    	vkDestroyImageView(_logicalDevice, _swapChainImageViews[i], nullptr);
+    }
+    free(_swapChainFramebuffers);
+    free(_swapChainImageViews);
+
+    vkDestroySwapchainKHR(_logicalDevice, _swapChain, nullptr);
+	}
+
+	void recreateSwapChain() {
+		destroySwapChain();
+    createSwapChain();
+    createImageViews();
+    createRenderPass();
+    createGraphicsPipeline();
+    createFramebuffers();
+	}
+
 	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     VkCommandBufferBeginInfo beginInfo {
     	.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -213,8 +248,8 @@ private:
     VkLayerProperties* props = (VkLayerProperties*) malloc(layerCount * sizeof(VkLayerProperties));
     vkEnumerateInstanceLayerProperties(&layerCount, props);
 
-    enabledLayerCount = 0;
-    ppEnabledLayerNames = (const char**) malloc(layerCount * sizeof(const char*));
+    _enabledLayerCount = 0;
+    _ppEnabledLayerNames = (const char**) malloc(layerCount * sizeof(const char*));
     for (uint32_t i = 0; i < layerCount; ++i) {
     	const char* layerName = props[i].layerName;
     	if (strcmp("VK_LAYER_LUNARG_device_simulation", layerName) == 0 ||
@@ -222,8 +257,8 @@ private:
     		continue;
     	}
 
-    	ppEnabledLayerNames[enabledLayerCount] = layerName;
-    	++enabledLayerCount;
+    	_ppEnabledLayerNames[_enabledLayerCount] = strdup(layerName);
+    	++_enabledLayerCount;
     }
 
     uint32_t enabledExtensionCount = 2;
@@ -243,8 +278,8 @@ private:
     VkInstanceCreateInfo createInfo {
     	.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
     	.pApplicationInfo = &appInfo,
-    	.enabledLayerCount = enabledLayerCount,
-    	.ppEnabledLayerNames = ppEnabledLayerNames,
+    	.enabledLayerCount = _enabledLayerCount,
+    	.ppEnabledLayerNames = _ppEnabledLayerNames,
     	.enabledExtensionCount = enabledExtensionCount,
     	.ppEnabledExtensionNames = ppEnabledExtensionNames,
     };
@@ -348,14 +383,15 @@ private:
     		enabledExtensionCount = 2;
     	}
     }
+    free(extProps);
 
     VkPhysicalDeviceFeatures deviceFeatures{};
     VkDeviceCreateInfo createInfo {
     	.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 	    .queueCreateInfoCount = _queueFamilyIndexCount,
 	    .pQueueCreateInfos = queueCreateInfos,
-	    .enabledLayerCount = enabledLayerCount,
-	    .ppEnabledLayerNames = ppEnabledLayerNames,
+	    .enabledLayerCount = _enabledLayerCount,
+	    .ppEnabledLayerNames = _ppEnabledLayerNames,
 	    .enabledExtensionCount = enabledExtensionCount,
 	    .ppEnabledExtensionNames = ppEnabledExtensionNames,
 	    .pEnabledFeatures = &deviceFeatures,
@@ -581,8 +617,7 @@ private:
     	.pushConstantRangeCount = 0,
     };
 
-    VkPipelineLayout pipelineLayout;
-    if (vkCreatePipelineLayout(_logicalDevice, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(_logicalDevice, &pipelineLayoutInfo, nullptr, &_pipelineLayout) != VK_SUCCESS) {
       return false;
     }
 
@@ -687,7 +722,7 @@ private:
 	    .pRasterizationState = &rasterizer,
 	    .pMultisampleState = &multisampling,
 	    .pColorBlendState = &colorBlending,
-	    .layout = pipelineLayout,
+	    .layout = _pipelineLayout,
 	    .renderPass = _renderPass,
 	    .subpass = 0,
 	    .basePipelineHandle = VK_NULL_HANDLE,
@@ -781,6 +816,7 @@ private:
 	VkFormat _swapChainImageFormat;
 	VkExtent2D _swapChainExtent;
 	VkRenderPass _renderPass;
+	VkPipelineLayout _pipelineLayout;
 	VkPipeline _graphicsPipeline;
 	VkFramebuffer* _swapChainFramebuffers;
 	VkCommandPool _commandPool;
@@ -793,9 +829,8 @@ private:
 	uint32_t _swapChainImageCount;
 	uint32_t _queueFamilyIndexCount;
 	uint32_t _queueFamilyIndices[2];
-	
-	uint32_t enabledLayerCount;
-  const char** ppEnabledLayerNames;
+	uint32_t _enabledLayerCount;
+  const char** _ppEnabledLayerNames;
 };
 
 Application* createApplication() {
