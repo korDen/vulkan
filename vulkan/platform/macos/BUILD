@@ -7,14 +7,12 @@ objc_library(
     srcs = [
         "ApplicationControllerImpl.mm",
         "AppDelegate.mm",
-        "OpenGLWindow.mm",
         "MetalWindow.mm",
         "main.mm",
     ],
     hdrs = [
         "ApplicationControllerImpl.h",
         "AppDelegate.h",
-        "OpenGLWindow.h",
         "MetalWindow.h",
     ],
     sdk_frameworks = [
@@ -28,6 +26,5 @@ objc_library(
         "@rules_vulkan//vulkan:vulkan_cc_library",
         "@bazel_tools//tools/cpp/runfiles",
     ],
-    # defines = ["PLATFORM_MACOS_USE_OPENGL"],
     defines = ["PLATFORM_MACOS_USE_METAL"],
 )

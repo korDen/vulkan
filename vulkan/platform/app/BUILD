@@ -4,7 +4,6 @@ cc_library(
     name = "Application",
     hdrs = ["Application.h"],
     deps = [
-        "@glfw",
         "@rules_vulkan//vulkan:vulkan_cc_library",
     ],
 )

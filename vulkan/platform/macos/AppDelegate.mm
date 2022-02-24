@@ -1,8 +1,12 @@
 #if defined OS_MACOSX
 
 #include "vulkan/platform/macos/AppDelegate.h"
+
+#if defined PLATFORM_MACOS_USE_OPENGL
 #include "vulkan/platform/macos/OpenGLWindow.h"
+#elif defined PLATFORM_MACOS_USE_METAL
 #include "vulkan/platform/macos/MetalWindow.h"
+#endif
 
 @implementation AppDelegate {
 #if defined PLATFORM_MACOS_USE_OPENGL
