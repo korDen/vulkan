@@ -44,8 +44,6 @@ enum PointOfFailure {
 	POINT_OF_FAILURE_18,
 	POINT_OF_FAILURE_19,
 	POINT_OF_FAILURE_20,
-	POINT_OF_FAILURE_21,
-	POINT_OF_FAILURE_22,
 	POINT_OF_FAILURE_MAX,
 };
 #endif
@@ -63,22 +61,6 @@ public:
 
 #if !defined NDEBUG
 	void checkInvariant(const char* function) {
-		if (_enabledLayerCount != 0) {
-			if (_ppEnabledLayerNames == nullptr) {
-				fprintf(stderr, "_enabledLayerCount is not 0 but _ppEnabledLayerNames is nullptr.\n");
-				exit(-1);
-			}
-
-			// Should only be initialized if _currentState is STATE_LAYERS_INITIALIZED or higher.
-			if (_currentState < STATE_LAYERS_INITIALIZED) {
-				fprintf(stderr, "_enabledLayerCount is not 0 but _currentState is %d.\n", _currentState);
-				exit(-1);
-			}
-		} else if (_ppEnabledLayerNames != nullptr) {
-			fprintf(stderr, "_enabledLayerCount is 0 but _ppEnabledLayerNames is not nullptr.\n");
-			exit(-1);
-		}
-
 		CHECK_STATE(_instance, STATE_INSTANCE_CREATED);
 		CHECK_STATE(_surface, STATE_SURFACE_CREATED);
 		CHECK_STATE(_physicalDevice, STATE_PHYSICAL_DEVICE_CREATED);
@@ -110,93 +92,76 @@ public:
 	}
 #endif
 
-	bool initialize() {
-		if (!initializeLayers()) {
-			return deinitialize(STATE_UNINITIALIZED);
+	void freeValidationLayerNames(const char** validationLayerNames, uint32_t numValidationLayers) {
+		for (uint32_t i = 0; i < numValidationLayers; ++i) {
+			free((char*) validationLayerNames[i]);
 		}
-		CHECK_CURRENT_STATE(STATE_LAYERS_INITIALIZED);
+		free(validationLayerNames);
+	}
 
-	  if (!createInstance()) {
-	  	return deinitialize(STATE_LAYERS_INITIALIZED);
+	bool initialize() {
+		uint32_t numValidationLayers = 0;
+		const char** validationLayerNames = getValidationLayerNames(&numValidationLayers);
+
+	  if (!createInstance(validationLayerNames, numValidationLayers)) {
+	  	freeValidationLayerNames(validationLayerNames, numValidationLayers);
+	  	return false;
 	  }
-	  CHECK_CURRENT_STATE(STATE_INSTANCE_CREATED);
 
 	  if (!createSurface()) {
+	  	freeValidationLayerNames(validationLayerNames, numValidationLayers);
 	  	return deinitialize(STATE_INSTANCE_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_SURFACE_CREATED);
 
 	  if (!pickPhysicalDevice()) {
+	  	freeValidationLayerNames(validationLayerNames, numValidationLayers);
 	  	return deinitialize(STATE_SURFACE_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_PHYSICAL_DEVICE_CREATED);
 
-	  if (!createLogicalDevice()) {
+	  if (!createLogicalDevice(validationLayerNames, numValidationLayers)) {
+	  	freeValidationLayerNames(validationLayerNames, numValidationLayers);
 	  	return deinitialize(STATE_PHYSICAL_DEVICE_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_LOGICAL_DEVICE_CREATED);
+
+	  freeValidationLayerNames(validationLayerNames, numValidationLayers);
 
 	  if (!createCommandPool()) {
 	  	return deinitialize(STATE_LOGICAL_DEVICE_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_COMMAND_POOL_CREATED);
 
 	  if (!createCommandBuffers()) {
 	  	return deinitialize(STATE_COMMAND_POOL_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_COMMAND_BUFFERS_CREATED);
 
 	  if (!createSyncObjects()) {
 	  	return deinitialize(STATE_COMMAND_BUFFERS_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_SYNC_OBJECTS_CREATED);
 
 	  if (!createSwapChain()) {
 	  	return deinitialize(STATE_SYNC_OBJECTS_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_CREATED);
 
 	  if (!createSwapChainImageViews()) {
 	  	return deinitialize(STATE_SWAP_CHAIN_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED);
 
 	  if (!createRenderPass()) {
 	  	return deinitialize(STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_RENDER_PASS_CREATED);
 
 	  if (!createFramebuffers()) {
 	  	return deinitialize(STATE_RENDER_PASS_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED);
 
 	  if (!createPipelineLayout()) {
 	  	return deinitialize(STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_PIPELINE_LAYOUT_CREATED);
 
 	  if (!createGraphicsPipeline()) {
 	  	return deinitialize(STATE_PIPELINE_LAYOUT_CREATED);
 	  }
-	  CHECK_CURRENT_STATE(STATE_GRAPHICS_PIPELINE_CREATED);
 
 	  return true;
-	}
-
-	void deinitializeLayers() {
-		CHECK_CURRENT_STATE(STATE_LAYERS_INITIALIZED);
-		for (uint32_t i = 0; i < _enabledLayerCount; ++i) {
-			free((char*) _ppEnabledLayerNames[i]);
-		}
-		free(_ppEnabledLayerNames);
-		_enabledLayerCount = 0;
-		_ppEnabledLayerNames = nullptr;
-
-#if !defined NDEBUG
-		--_currentState;
-		checkInvariant("deinitializeLayers");
-#endif
 	}
 
 	void deinitializeInstance() {
@@ -212,7 +177,6 @@ public:
 
 	void deinitializeSurface() {
 		CHECK_CURRENT_STATE(STATE_SURFACE_CREATED);
-		// TODO: also destroy associated CAMetalLayer on MacOS.
 		vkDestroySurfaceKHR(_instance, _surface, nullptr);
 		_surface = nullptr;
 
@@ -416,9 +380,6 @@ public:
 			case STATE_INSTANCE_CREATED:
 				deinitializeInstance();
 
-			case STATE_LAYERS_INITIALIZED:
-				deinitializeLayers();
-
 			case STATE_UNINITIALIZED:
 				break;
 		}
@@ -452,12 +413,13 @@ public:
 		// 	checkInvariant("after");
 		// }
 
+		// printf("done.\n");
+		// exit(-1);
+
 		return initialize();
 	}
 
-
 	uint32_t _currentFrame = 0;
-	bool framebufferResized = false;
 
 	virtual void termGraphics() override {
 		if (_logicalDevice != nullptr) {
@@ -469,8 +431,6 @@ public:
 			}
 
 			deinitialize(STATE_GRAPHICS_PIPELINE_CREATED);
-		} else {
-			deinitialize(STATE_UNINITIALIZED);
 		}
 	}
 
@@ -493,8 +453,8 @@ public:
       recreateSwapChain();
       return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-    	// TODO: implement.
-     return;
+    	// Hmmm, what are we supposed to do here?
+     	return;
     }
 
     result = vkResetFences(_logicalDevice, 1, &_inFlightFences[_currentFrame]);
@@ -538,8 +498,7 @@ public:
     };
 
     result = vkQueuePresentKHR(_presentationQueue, &presentInfo);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
-      framebufferResized = false;
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
       recreateSwapChain();
       return;
     } else if (result != VK_SUCCESS) {
@@ -549,7 +508,9 @@ public:
     _currentFrame = (_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
 
-	virtual void resize(float windowWidth, float windowHeight) override {}
+	virtual void resize(float windowWidth, float windowHeight) override {
+		recreateSwapChain();
+	}
 
 private:
 	bool recreateSwapChain() {
@@ -559,6 +520,7 @@ private:
 			exit(-1);
 		}
 
+		// Deinitialize in reverse order until the swap chain is destroyed.
 		deinitializeGraphicsPipeline();
 		deinitializePipelineLayout();
 		deinitializeFramebuffers();
@@ -566,32 +528,26 @@ private:
 		deinitializeSwapChainImageViews();
 		deinitializeSwapChain();
 
-		CHECK_CURRENT_STATE(STATE_SYNC_OBJECTS_CREATED);
     if (!createSwapChain()) {
     	return deinitialize(STATE_SYNC_OBJECTS_CREATED);
     }
 
-	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_CREATED);
 	  if (!createSwapChainImageViews()) {
 	  	return deinitialize(STATE_SWAP_CHAIN_CREATED);
 	  }
 
-	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED);
 	  if (!createRenderPass()) {
 	  	return deinitialize(STATE_SWAP_CHAIN_IMAGE_VIEWS_CREATED);
 	  }
 
-	  CHECK_CURRENT_STATE(STATE_RENDER_PASS_CREATED);
 	  if (!createFramebuffers()) {
 	  	return deinitialize(STATE_RENDER_PASS_CREATED);
 	  }
 
-	  CHECK_CURRENT_STATE(STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED);
 	  if (!createPipelineLayout()) {
 	  	return deinitialize(STATE_SWAP_CHAIN_FRAMEBUFFERS_CREATED);
 	  }
 
-	  CHECK_CURRENT_STATE(STATE_PIPELINE_LAYOUT_CREATED);
 	  if (!createGraphicsPipeline()) {
 	  	return deinitialize(STATE_PIPELINE_LAYOUT_CREATED);
 	  }
@@ -649,57 +605,46 @@ private:
 		return true;
 	}
 
-	bool initializeLayers() {
+	static const char** getValidationLayerNames(uint32_t* numValidationLayersPtr) {
 #if defined NDEBUG
-		return true;
+		return nullptr;
 #else
-		CHECK_CURRENT_STATE(STATE_UNINITIALIZED);
-
 		uint32_t layerCount;
-    VkResult result = POINT_OF_FAILURE(vkEnumerateInstanceLayerProperties)(&layerCount, nullptr);
-    if (result != VK_SUCCESS) {
-    	return false;
+    VkResult result = vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+    if (result != VK_SUCCESS || layerCount == 0) {
+    	return nullptr;
     }
 
-    if (layerCount != 0) {
-    	VkLayerProperties* props = (VkLayerProperties*) malloc(layerCount * sizeof(VkLayerProperties));
-	    result = POINT_OF_FAILURE(vkEnumerateInstanceLayerProperties)(&layerCount, props);
-	    if (result != VK_SUCCESS) {
-	    	free(props);
-	    	return false;
-	    }
+  	VkLayerProperties* layerProperties = (VkLayerProperties*) malloc(layerCount * sizeof(VkLayerProperties));
+    result = vkEnumerateInstanceLayerProperties(&layerCount, layerProperties);
+    if (result != VK_SUCCESS) {
+    	free(layerProperties);
+    	return nullptr;
+    }
 
-    	uint32_t enabledLayerCount = 0;
-	    const char** enabledLayerNames = (const char**) malloc(layerCount * sizeof(const char*));
-	    
-	    // Enable all except blackisted layers that we are not interested in.
-	    for (uint32_t i = 0; i < layerCount; ++i) {
-	    	const char* layerName = props[i].layerName;
-	    	if (strcmp("VK_LAYER_LUNARG_device_simulation", layerName) == 0 ||
-	    			strcmp("VK_LAYER_LUNARG_gfxreconstruct", layerName) == 0) {
-	    		continue;
-	    	}
+  	uint32_t numValidationLayers = 0;
+    const char** validationLayerNames = (const char**) malloc(layerCount * sizeof(char*));
+    
+    // Enable all except blackisted layers that we are not interested in.
+    for (uint32_t i = 0; i < layerCount; ++i) {
+    	const char* layerName = layerProperties[i].layerName;
+    	if (strcmp("VK_LAYER_LUNARG_device_simulation", layerName) == 0 ||
+    			strcmp("VK_LAYER_LUNARG_gfxreconstruct", layerName) == 0) {
+    		continue;
+    	}
 
-	    	enabledLayerNames[enabledLayerCount] = strdup(layerName);
-	    	++enabledLayerCount;
-	    }
+    	validationLayerNames[numValidationLayers] = strdup(layerName);
+    	++numValidationLayers;
+    }
+    free(layerProperties);
 
-	    if (enabledLayerCount == 0) {
-	    	free(enabledLayerNames);
-	    } else {
-	    	_enabledLayerCount = enabledLayerCount;
-	    	_ppEnabledLayerNames = enabledLayerNames;
-	    }
-
-	    free(props);
-	  }
-
-    return advanceState(STATE_LAYERS_INITIALIZED, __FUNCTION__);
+    *numValidationLayersPtr = numValidationLayers;
+    return validationLayerNames;
 #endif
 	}
 
-	bool createInstance() {
-		CHECK_CURRENT_STATE(STATE_LAYERS_INITIALIZED);
+	bool createInstance(const char** validationLayerNames, uint32_t numValidationLayers) {
+		CHECK_CURRENT_STATE(STATE_UNINITIALIZED);
 
 		VkApplicationInfo appInfo {
 			.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -727,8 +672,8 @@ private:
     VkInstanceCreateInfo createInfo {
     	.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
     	.pApplicationInfo = &appInfo,
-    	.enabledLayerCount = _enabledLayerCount,
-    	.ppEnabledLayerNames = _ppEnabledLayerNames,
+    	.enabledLayerCount = numValidationLayers,
+    	.ppEnabledLayerNames = validationLayerNames,
     	.enabledExtensionCount = enabledExtensionCount,
     	.ppEnabledExtensionNames = ppEnabledExtensionNames,
     };
@@ -776,7 +721,7 @@ private:
     return advanceState(STATE_PHYSICAL_DEVICE_CREATED, __FUNCTION__);
 	}
 
-	bool createLogicalDevice() {
+	bool createLogicalDevice(const char** validationLayerNames, uint32_t numValidationLayers) {
 		CHECK_CURRENT_STATE(STATE_PHYSICAL_DEVICE_CREATED);
 		uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(_physicalDevice, &queueFamilyCount, nullptr);
@@ -869,8 +814,8 @@ private:
     	.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 	    .queueCreateInfoCount = queueFamilyIndexCount,
 	    .pQueueCreateInfos = queueCreateInfos,
-	    .enabledLayerCount = _enabledLayerCount,
-	    .ppEnabledLayerNames = _ppEnabledLayerNames,
+	    .enabledLayerCount = numValidationLayers,
+	    .ppEnabledLayerNames = validationLayerNames,
 	    .enabledExtensionCount = enabledExtensionCount,
 	    .ppEnabledExtensionNames = ppEnabledExtensionNames,
 	    .pEnabledFeatures = &deviceFeatures,
@@ -1370,7 +1315,6 @@ private:
 
 	enum {
 		STATE_UNINITIALIZED,
-		STATE_LAYERS_INITIALIZED,
 		STATE_INSTANCE_CREATED,
 		STATE_SURFACE_CREATED,
 		STATE_PHYSICAL_DEVICE_CREATED,
@@ -1427,8 +1371,6 @@ private:
 	uint32_t _swapChainImageCount {0xFFFFFFFF};
 	uint32_t _queueFamilyIndexCount {0xFFFFFFFF};
 	uint32_t _queueFamilyIndices[2] {0xFFFFFFFF, 0xFFFFFFFF};
-	uint32_t _enabledLayerCount {0};
-  const char** _ppEnabledLayerNames {nullptr};
 };
 
 Application* createApplication() {
